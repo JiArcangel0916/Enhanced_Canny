@@ -2,8 +2,10 @@ import numpy as np
 import cv2
 import sys
 import time 
+import os
 
 def save_image(image, file_path):
+    os.makedirs(os.path.dirname(os.path.abspath(file_path)), exist_ok=True)
     if image.dtype != np.uint8:
         image_normalized = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
         image_to_save = np.uint8(image_normalized)
@@ -84,7 +86,6 @@ def compute_gradient_magnitude_and_orientation(image, sobel_kernel_size):
 
     # Compute gradient magnitude and orientation
     magnitude = np.sqrt(gradient_x ** 2 + gradient_y ** 2)
-    save_image(magnitude, "3-gradient_magnitude.jpg")
     orientation = np.arctan2(gradient_y, gradient_x)
 
     return magnitude, orientation
@@ -135,7 +136,7 @@ def apply_edge_tracking_by_hysteresis(magnitude, low_threshold, high_threshold):
     
     return edge_map
 
-def canny_edge_detection(image, low_threshold, high_threshold, gaussian_kernel_size=5, sobel_kernel_size=3):
+def canny_edge_detection(image, low_threshold, high_threshold, gaussian_kernel_size=5, sobel_kernel_size=3, output_dir=None, base_name=""):
     total_start = time.perf_counter()
 
     print("Applying gaussian filter (for noise reduction) with kernel_size=" + str(gaussian_kernel_size) + "...")
@@ -143,20 +144,24 @@ def canny_edge_detection(image, low_threshold, high_threshold, gaussian_kernel_s
     blurred_image = apply_gaussian_blur(image, gaussian_kernel_size)
     duration = time.perf_counter() - start
     print(f"--- Gaussian Blur completed in: {duration:.4f} seconds")
-    save_image(blurred_image, "2-blurred.jpg")
+    if output_dir:
+        save_image(blurred_image, os.path.join(output_dir, f"{base_name}2-blurred.jpg"))
 
     print("Computing gradient magnitude and orientation with sobel_kernel_size=" + str(sobel_kernel_size) + "...")
     start = time.perf_counter()
     gradient_magnitude, gradient_orientation = compute_gradient_magnitude_and_orientation(blurred_image, sobel_kernel_size)
     duration = time.perf_counter() - start
     print(f"--- Gradient Computation completed in: {duration:.4f} seconds")
+    if output_dir:
+        save_image(gradient_magnitude, os.path.join(output_dir, f"{base_name}3-gradient_magnitude.jpg"))
 
     print("Applying non-maximum suppression...")
     start = time.perf_counter()
     non_max_suppressed = apply_non_max_suppression(gradient_magnitude, gradient_orientation)
     duration = time.perf_counter() - start
     print(f"--- NMS completed in: {duration:.4f} seconds")
-    save_image(non_max_suppressed, "4-non_max_suppressed.jpg")
+    if output_dir:
+        save_image(non_max_suppressed, os.path.join(output_dir, f"{base_name}4-non_max_suppressed.jpg"))
     
     print("Applying edge tracking by hysteresis with low_threshold=" + str(low_threshold) + ", high_threshold=" + str(high_threshold) + "...")
     start = time.perf_counter()
@@ -171,6 +176,8 @@ def canny_edge_detection(image, low_threshold, high_threshold, gaussian_kernel_s
 
 if __name__ == '__main__':
     path_to_image = "benchmark/1024.png"
+    output_directory = "."
+    base_filename = ""
 
     # Loading the original image
     original_image = cv2.imread(path_to_image)
@@ -181,7 +188,7 @@ if __name__ == '__main__':
         original_image = rgb_to_gray(original_image)
 
     # Save grayscale image
-    save_image(original_image, "1-grayscale.jpg")
+    save_image(original_image, os.path.join(output_directory, f"{base_filename}1-grayscale.jpg"))
 
     # Define the PARAMETERS here
     low_threshold = 100 # Low_threshold value for hysteresis
@@ -190,7 +197,7 @@ if __name__ == '__main__':
     sobel_kernel_size = 3 # NOTE: sobel_kernel_size should be 3 or 5 only
 
     # Apply Canny edge detection
-    edge_image = canny_edge_detection(original_image, low_threshold, high_threshold, gaussian_kernel_size, sobel_kernel_size)
+    edge_image = canny_edge_detection(original_image, low_threshold, high_threshold, gaussian_kernel_size, sobel_kernel_size, output_dir=output_directory, base_name=base_filename)
 
     # Save the resulting edge image
-    save_image(edge_image, "5-final_output.jpg")
+    save_image(edge_image, os.path.join(output_directory, f"{base_filename}5-final_output.jpg"))
