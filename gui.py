@@ -46,8 +46,11 @@ class CannyGUI:
         btn_frame = ttk.Frame(frame)
         btn_frame.grid(row=5, column=0, columnspan=2, pady=10)
         
-        ttk.Button(btn_frame, text="Process Single Image", command=self.process_single).grid(row=0, column=0, padx=5)
-        ttk.Button(btn_frame, text="Process Folder (Batch)", command=self.process_batch).grid(row=0, column=1, padx=5)
+        ttk.Button(btn_frame, text="Single Image (From Datasets)", command=lambda: self.process_single(from_datasets=True)).grid(row=0, column=0, padx=5, pady=2)
+        ttk.Button(btn_frame, text="Single Image (Anywhere)", command=lambda: self.process_single(from_datasets=False)).grid(row=0, column=1, padx=5, pady=2)
+        
+        ttk.Button(btn_frame, text="Batch Folder (From Datasets)", command=lambda: self.process_batch(from_datasets=True)).grid(row=1, column=0, padx=5, pady=2)
+        ttk.Button(btn_frame, text="Batch Folder (Anywhere)", command=lambda: self.process_batch(from_datasets=False)).grid(row=1, column=1, padx=5, pady=2)
         
         # Log
         self.log_text = tk.Text(frame, height=10, width=50, state=tk.DISABLED)
@@ -109,8 +112,9 @@ class CannyGUI:
         except Exception as e:
             self.log(f"Error processing {image_path}: {e}\n")
 
-    def process_single(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp")])
+    def process_single(self, from_datasets=False):
+        init_dir = os.path.join(os.getcwd(), "Datasets") if from_datasets else os.getcwd()
+        file_path = filedialog.askopenfilename(initialdir=init_dir, filetypes=[("Image files", "*.jpg *.jpeg *.png *.bmp")])
         if not file_path:
             return
             
@@ -123,8 +127,9 @@ class CannyGUI:
             
         threading.Thread(target=task).start()
 
-    def process_batch(self):
-        dir_path = filedialog.askdirectory()
+    def process_batch(self, from_datasets=False):
+        init_dir = os.path.join(os.getcwd(), "Datasets") if from_datasets else os.getcwd()
+        dir_path = filedialog.askdirectory(initialdir=init_dir)
         if not dir_path:
             return
             
