@@ -1,3 +1,9 @@
 /venv
 .vscode
 __pycache__
+
+1-grayscal.jpg
+2-blurred.jpg
+3-gradient_magnitude.jpg
+4-non_max_suppressed.jpg
+5-final_output.jpg
