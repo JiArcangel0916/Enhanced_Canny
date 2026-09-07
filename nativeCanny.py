@@ -175,7 +175,7 @@ def canny_edge_detection(image, low_threshold, high_threshold, gaussian_kernel_s
 
 
 if __name__ == '__main__':
-    path_to_image = "benchmark/1024.png"
+    path_to_image = "Datasets/EMDS-7/G006~G010/EMDS6-G009-003-0400.png"
     output_directory = "."
     base_filename = ""
 
