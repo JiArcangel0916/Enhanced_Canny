@@ -56,6 +56,7 @@ function App() {
     if (files.length === 0) return;
     setIsLoading(true);
 
+    // Initialize cards with individual statuses
     const initialOutputs = files.map((file, idx) => ({
       id: `${file.name}-${idx}-${Date.now()}`,
       name: file.name,
@@ -63,36 +64,76 @@ function App() {
       origURL: URL.createObjectURL(file),
       enhancedURL: null,
       nativeURL: null,
-      status: 'processing',
-      fileRef: file
+      enhancedStatus: 'processing', // 'processing' | 'done' | 'error'
+      nativeStatus: 'processing',   // 'processing' | 'done' | 'error'
+      fileRef: file,
     }));
 
     setOutputs(initialOutputs);
+
+    // Process files sequentially across uploads, but fire native and enhanced simultaneously per file
     for (let i = 0; i < initialOutputs.length; i++) {
       const item = initialOutputs[i];
-      const formData = new FormData();
-      formData.append('image', item.fileRef);
 
-      try {
-        const response = await fetch('http://localhost:5000/api/detect-edges', {
-          method: 'POST',
-          body: formData,
+      const formDataEnhanced = new FormData();
+      formDataEnhanced.append('image', item.fileRef);
+
+      const formDataNative = new FormData();
+      formDataNative.append('image', item.fileRef);
+
+      const enhancedPromise = fetch('http://localhost:5000/api/detect-edges/enhanced', {
+        method: 'POST',
+        body: formDataEnhanced,
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error('Enhanced processing failed');
+          }
+          const data = await res.json();
+          setOutputs((prev) =>
+            prev.map((o) =>
+              o.id === item.id
+                ? { ...o, enhancedURL: data.image, enhancedStatus: 'done' }
+                : o
+            )
+          );
+        })
+        .catch((err) => {
+          console.error('Enhanced error:', err);
+          setOutputs((prev) =>
+            prev.map((o) =>
+              o.id === item.id ? { ...o, enhancedStatus: 'error' } : o
+            )
+          );
         });
 
-        if (!response.ok) throw new Error('Processing Failed');
-        const data = await response.json();
+      const nativePromise = fetch('http://localhost:5000/api/detect-edges/native', {
+        method: 'POST',
+        body: formDataNative,
+      })
+        .then(async (res) => {
+          if (!res.ok) throw new Error('Native processing failed');
+          const data = await res.json();
+          setOutputs((prev) =>
+            prev.map((o) =>
+              o.id === item.id
+                ? { ...o, nativeURL: data.image, nativeStatus: 'done' }
+                : o
+            )
+          );
+        })
+        .catch((err) => {
+          console.error('Native error:', err);
+          setOutputs((prev) =>
+            prev.map((o) =>
+              o.id === item.id ? { ...o, nativeStatus: 'error' } : o
+            )
+          );
+        });
 
-        setOutputs((prev) => prev.map((o) =>
-          o.id === item.id ?
-            { ...o, status: 'done', enhancedURL: data.enhanced_processed_image, nativeURL: data.native_processed_image } :
-            o
-        ));
-      }
-      catch (err) {
-        console.error(err)
-        setOutputs((prev) => prev.map((o) => (o.id === item.id ? { ...o, status: 'error' } : o)))
-      }
+      await Promise.all([enhancedPromise, nativePromise]);
     }
+
     setIsLoading(false);
   };
 
@@ -158,6 +199,8 @@ function App() {
     }
   }
 
+  const isAllCompleted = outputs.length > 0 && outputs.every((item) => item.enhancedStatus === 'done' && item.nativeStatus === 'done');
+
   return (
     <>
       {/* HEADER SECTION */}
@@ -221,29 +264,29 @@ function App() {
             <div key={item.id} className='result-card'>
               <div className="card-top">
                 <strong className="card-file-name" title={item.name}>{item.name}</strong>
-                <button className="download-output" type='button' disabled={item.status !== 'done'} onClick={() => handleDownload(item.origURL, item.enhancedURL, item.nativeURL, item.name)}><FontAwesomeIcon icon={faArrowDown} />Download</button>
+                <button className="download-output" type='button' disabled={item.nativeStatus !== 'done' || item.enhancedStatus !== 'done'} onClick={() => handleDownload(item.origURL, item.enhancedURL, item.nativeURL, item.name)}><FontAwesomeIcon icon={faArrowDown} />Download</button>
               </div>
 
               <div className="comparison-grid">
-                {/* Left Input Image*/}
+                {/* Left: Input Image */}
                 <div className="sample-panel">
                   <div className="square-placeholder">
-                    <img className="sample-image" src={item.origURL} alt={`Input image: (${item.name})`} />
+                    <img className="sample-image" src={item.origURL} alt={`Input: ${item.name}`} />
                   </div>
                   <div className="panel-badge">Original Image</div>
                 </div>
 
-                {/* Middle Enhanced Canny Output Image */}
+                {/* Middle: Enhanced Canny */}
                 <div className="sample-panel">
                   <div className="square-placeholder">
-                    {item.status === 'processing' && (
+                    {item.enhancedStatus === 'processing' && (
                       <div className="placeholder-status">
                         <FontAwesomeIcon icon={faSpinner} spin className="spinner-icon" />
-                        <span>Processing Image</span>
+                        <span>Processing Enhanced...</span>
                       </div>
                     )}
 
-                    {item.status === 'done' && (
+                    {item.enhancedStatus === 'done' && (
                       <img
                         src={item.enhancedURL}
                         alt={`Enhanced Canny output for ${item.name}`}
@@ -251,7 +294,7 @@ function App() {
                       />
                     )}
 
-                    {item.status === 'error' && (
+                    {item.enhancedStatus === 'error' && (
                       <div className="placeholder-status error">
                         <FontAwesomeIcon icon={faCircleExclamation} />
                         <span>Detection Failed</span>
@@ -261,17 +304,17 @@ function App() {
                   <div className="panel-badge highlight">Enhanced Canny Edge Output</div>
                 </div>
 
-                {/* Right Native Canny Output Image*/}
+                {/* Right: Native Canny */}
                 <div className="sample-panel">
                   <div className="square-placeholder">
-                    {item.status === 'processing' && (
+                    {item.nativeStatus === 'processing' && (
                       <div className="placeholder-status">
                         <FontAwesomeIcon icon={faSpinner} spin className="spinner-icon" />
-                        <span>Processing Image</span>
+                        <span>Processing Native...</span>
                       </div>
                     )}
 
-                    {item.status === 'done' && (
+                    {item.nativeStatus === 'done' && (
                       <img
                         src={item.nativeURL}
                         alt={`Native Canny output for ${item.name}`}
@@ -279,7 +322,7 @@ function App() {
                       />
                     )}
 
-                    {item.status === 'error' && (
+                    {item.nativeStatus === 'error' && (
                       <div className="placeholder-status error">
                         <FontAwesomeIcon icon={faCircleExclamation} />
                         <span>Detection Failed</span>
@@ -292,6 +335,25 @@ function App() {
             </div>
           ))}
         </div>
+
+        {/* BUTTONS FOR VIEWING MEASUREMENTS */}
+        {isAllCompleted && (
+          <div className="measurements">
+            {/* DITO LALAGAY YUNG BUTTONS FOR:
+            PSNR, MSE
+            PRATTS FIGURE OF MERIT
+            SPEEDUP
+
+            each button maggenerate ng table ng metrics for enhanced vs native canny base sa input image/s 
+          */}
+            <p>View Comparison Metrics</p>
+            <div className="metric-group">
+              <button className="metric-button" type='button'>Peak Signal-to-Noise Ration and Mean Squared Error</button>
+              <button className="metric-button" type='button'>Pratt's Figure of Merit</button>
+              <button className="metric-button" type='button'>Speedup</button>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* FOOTER SECTION */}
