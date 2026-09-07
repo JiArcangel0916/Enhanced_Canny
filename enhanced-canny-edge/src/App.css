@@ -260,28 +260,37 @@ main {
   width: 25%;
 }
 
+.download-output:disabled {
+  background-color: var(--text-muted);
+}
+
 .comparison-grid {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .5rem;
+  width: 100%;
+  height: 100%;
+  align-items: start;
 }
 
 .sample-panel {
+  min-width: 33%;
+  height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: .75rem;
+  align-items: center;
 }
 
 .square-placeholder {
   width: 100%;
-  aspect-ratio: 1 / 1;
+  height: 100%;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   box-sizing: border-box;
   border: 1px solid var(--text-muted);
 }

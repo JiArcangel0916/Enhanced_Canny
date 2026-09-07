@@ -61,13 +61,13 @@ function App() {
       name: file.name,
       size: (file.size / 1024).toFixed(1),
       origURL: URL.createObjectURL(file),
-      processedURL: null,
+      enhancedURL: null,
+      nativeURL: null,
       status: 'processing',
       fileRef: file
     }));
 
     setOutputs(initialOutputs);
-    console.log(outputs)
     for (let i = 0; i < initialOutputs.length; i++) {
       const item = initialOutputs[i];
       const formData = new FormData();
@@ -84,16 +84,79 @@ function App() {
 
         setOutputs((prev) => prev.map((o) =>
           o.id === item.id ?
-            { ...o, status: 'done', processedUrl: data.processed_image } :
+            { ...o, status: 'done', enhancedURL: data.enhanced_processed_image, nativeURL: data.native_processed_image } :
             o
         ));
       }
       catch (err) {
+        console.error(err)
         setOutputs((prev) => prev.map((o) => (o.id === item.id ? { ...o, status: 'error' } : o)))
       }
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
+
+  const handleDownload = async (origSrc, enhancedSrc, nativeSrc, fileName) => {
+    if (!origSrc || !enhancedSrc || !nativeSrc) return;
+
+    const loadImg = (src) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = (err) => reject(err);
+        img.src = src;
+      });
+    };
+
+    try {
+      const [origImg, enhancedImg, nativeImg] = await Promise.all([loadImg(origSrc), loadImg(enhancedSrc), loadImg(nativeSrc)]);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      const targetHeight = Math.max(origImg.naturalHeight, enhancedImg.naturalHeight, nativeImg.naturalHeight);
+      const origWidth = (origImg.naturalWidth / origImg.naturalHeight) * targetHeight;
+      const enhancedWidth = (enhancedImg.naturalWidth / enhancedImg.naturalHeight) * targetHeight;
+      const nativeWidth = (nativeImg.naturalWidth / nativeImg.naturalHeight) * targetHeight;
+
+      const padding = 30;
+      const gap = 30;
+      const headerHeight = 70;
+
+      const x1 = padding;
+      const x2 = x1 + origWidth + gap;
+      const x3 = x2 + enhancedWidth + gap;
+
+      canvas.width = padding + origWidth + gap + enhancedWidth + gap + nativeWidth + padding;
+      canvas.height = headerHeight + targetHeight + padding;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.font = 'bold 20px sans-serif';
+
+      ctx.fillStyle = '#000000';
+      ctx.fillText('INPUT IMAGE', x1, 45);
+      ctx.fillText('ENHANCED CANNY EDGE', x2, 45);
+      ctx.fillText('NATIVE CANNY EDGE', x3, 45);
+
+      ctx.drawImage(origImg, x1, headerHeight, origWidth, targetHeight);
+      ctx.drawImage(enhancedImg, x2, headerHeight, enhancedWidth, targetHeight);
+      ctx.drawImage(nativeImg, x3, headerHeight, nativeWidth, targetHeight);
+
+      const combineDataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = combineDataUrl;
+      link.download = `comparison_${fileName.replace(/\.[^/.]+$/, '')}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    catch (err) {
+      console.error(`Error: ${err}`);
+      alert("Failed to download comparison grid");
+    }
+  }
 
   return (
     <>
@@ -158,32 +221,32 @@ function App() {
             <div key={item.id} className='result-card'>
               <div className="card-top">
                 <strong className="card-file-name" title={item.name}>{item.name}</strong>
-                <button className="download-output" type='button'><FontAwesomeIcon icon={faArrowDown} />Download</button>
+                <button className="download-output" type='button' disabled={item.status !== 'done'} onClick={() => handleDownload(item.origURL, item.enhancedURL, item.nativeURL, item.name)}><FontAwesomeIcon icon={faArrowDown} />Download</button>
               </div>
 
               <div className="comparison-grid">
                 {/* Left Input Image*/}
                 <div className="sample-panel">
-                  <div className="square-placeholder original-box">
+                  <div className="square-placeholder">
                     <img className="sample-image" src={item.origURL} alt={`Input image: (${item.name})`} />
                   </div>
                   <div className="panel-badge">Original Image</div>
                 </div>
 
-                {/* Right Output Image*/}
+                {/* Middle Enhanced Canny Output Image */}
                 <div className="sample-panel">
-                  <div className="square-placeholder image-display-box processed-box">
+                  <div className="square-placeholder">
                     {item.status === 'processing' && (
                       <div className="placeholder-status">
                         <FontAwesomeIcon icon={faSpinner} spin className="spinner-icon" />
-                        <span>Computing edge gradients...</span>
+                        <span>Processing Image</span>
                       </div>
                     )}
 
                     {item.status === 'done' && (
                       <img
-                        src={item.processedUrl}
-                        alt={`Canny output for ${item.name}`}
+                        src={item.enhancedURL}
+                        alt={`Enhanced Canny output for ${item.name}`}
                         className="sample-image"
                       />
                     )}
@@ -196,6 +259,34 @@ function App() {
                     )}
                   </div>
                   <div className="panel-badge highlight">Enhanced Canny Edge Output</div>
+                </div>
+
+                {/* Right Native Canny Output Image*/}
+                <div className="sample-panel">
+                  <div className="square-placeholder">
+                    {item.status === 'processing' && (
+                      <div className="placeholder-status">
+                        <FontAwesomeIcon icon={faSpinner} spin className="spinner-icon" />
+                        <span>Processing Image</span>
+                      </div>
+                    )}
+
+                    {item.status === 'done' && (
+                      <img
+                        src={item.nativeURL}
+                        alt={`Native Canny output for ${item.name}`}
+                        className="sample-image"
+                      />
+                    )}
+
+                    {item.status === 'error' && (
+                      <div className="placeholder-status error">
+                        <FontAwesomeIcon icon={faCircleExclamation} />
+                        <span>Detection Failed</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="panel-badge highlight">Native Canny Edge Output</div>
                 </div>
               </div>
             </div>
