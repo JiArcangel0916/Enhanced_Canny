@@ -4,7 +4,7 @@ import cv2
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from nativeCanny import run_native_canny
-from enhancedCanny import run_enhanced_canny
+from enhancedCanny import enhanced_canny_edge_detection as run_enhanced_canny
 
 app = Flask(__name__)
 CORS(app)

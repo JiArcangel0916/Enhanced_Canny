@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 
 def rgb_to_gray(image):
-    return np.mean(image, axis=2).astype(np.uint8)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
 def apply_gaussian_blur(image, kernel_size):
     if kernel_size % 2 == 0:
@@ -105,12 +105,6 @@ def apply_edge_tracking_by_hysteresis(magnitude, low_threshold, high_threshold):
     return edge_map
 
 def run_native_canny(image, low=50, high=150):
-    h, w = image.shape[:2]
-    max_dim = 600
-    if max(h, w) > max_dim:
-        scale = max_dim / float(max(h, w))
-        image = cv2.resize(image, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
-
     if len(image.shape) == 3:
         gray = rgb_to_gray(image)
     else:
