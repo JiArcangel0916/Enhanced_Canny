@@ -496,8 +496,12 @@ def load_grayscale(path):
 # MAIN
 # ============================================================================
 if __name__ == "__main__":
+<<<<<<< HEAD
     # path_to_image = "Datasets/EMDS-7/G006~G010/EMDS6-G009-003-0400.png"
     path_to_image = "samples/tiger.jpg"
+=======
+    path_to_image = "Datasets/EMDS-7/G021~G025/EMDS6-G021-001-0400.png"
+>>>>>>> 9e03e13f16b9850dbb6c2a10ec2e8da6894a7ff4
     output_directory = "output"
     base_filename = "enhanced_"
 
