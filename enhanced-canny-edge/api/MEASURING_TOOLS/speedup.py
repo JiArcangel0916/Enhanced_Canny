@@ -18,7 +18,6 @@ def calculate_speedup(baseline_time, optimized_time):
     return speedup
 
 # --- Example Usage ---
-# Assuming the baseline algorithm took 5.0 seconds and the optimized one took 0.26 seconds
 t_m1_equals_1 = 5.0  
 t_m1_greater_than_1 = 0.26  
 

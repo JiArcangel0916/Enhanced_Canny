@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMicroscope, faFileImage, faX, faSpinner, faArrowDown, faCircleExclamation } from '@fortawesome/free-solid-svg-icons'
+import { faMicroscope, faFileImage, faX, faSpinner, faArrowDown, faCircleExclamation, faChartSimple } from '@fortawesome/free-solid-svg-icons'
 import './App.css'
 
 function App() {
@@ -8,6 +8,8 @@ function App() {
   const [outputs, setOutputs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [activeTable, setActiveTable] = useState('psnr');
   const fileInputRef = useRef(null);
 
   const handleFiles = (inputFiles) => {
@@ -56,7 +58,6 @@ function App() {
     if (files.length === 0) return;
     setIsLoading(true);
 
-    // Initialize cards with individual statuses
     const initialOutputs = files.map((file, idx) => ({
       id: `${file.name}-${idx}-${Date.now()}`,
       name: file.name,
@@ -64,14 +65,15 @@ function App() {
       origURL: URL.createObjectURL(file),
       enhancedURL: null,
       nativeURL: null,
-      enhancedStatus: 'processing', // 'processing' | 'done' | 'error'
-      nativeStatus: 'processing',   // 'processing' | 'done' | 'error'
+      enhancedMetrics: null,
+      nativeMetrics: null,
+      enhancedStatus: 'processing',
+      nativeStatus: 'processing',
       fileRef: file,
     }));
 
     setOutputs(initialOutputs);
 
-    // Process files sequentially across uploads, but fire native and enhanced simultaneously per file
     for (let i = 0; i < initialOutputs.length; i++) {
       const item = initialOutputs[i];
 
@@ -93,7 +95,7 @@ function App() {
           setOutputs((prev) =>
             prev.map((o) =>
               o.id === item.id
-                ? { ...o, enhancedURL: data.image, enhancedStatus: 'done' }
+                ? { ...o, enhancedURL: data.image, enhancedMetrics: data.metrics, enhancedStatus: 'done' }
                 : o
             )
           );
@@ -117,7 +119,7 @@ function App() {
           setOutputs((prev) =>
             prev.map((o) =>
               o.id === item.id
-                ? { ...o, nativeURL: data.image, nativeStatus: 'done' }
+                ? { ...o, nativeURL: data.image, nativeMetrics: data.metrics, nativeStatus: 'done' }
                 : o
             )
           );
@@ -338,19 +340,221 @@ function App() {
 
         {/* BUTTONS FOR VIEWING MEASUREMENTS */}
         {isAllCompleted && (
-          <div className="measurements">
-            {/* DITO LALAGAY YUNG BUTTONS FOR:
-            PSNR, MSE
-            PRATTS FIGURE OF MERIT
-            SPEEDUP
+          <button className='metric-button' onClick={() => { setIsModalOpen(true) }}><FontAwesomeIcon icon={faChartSimple} className="chart-symbol" />View Comparison Metrics</button>
+        )}
 
-            each button maggenerate ng table ng metrics for enhanced vs native canny base sa input image/s 
-          */}
-            <p>View Comparison Metrics</p>
-            <div className="metric-group">
-              <button className="metric-button" type='button'>Peak Signal-to-Noise Ration and Mean Squared Error</button>
-              <button className="metric-button" type='button'>Pratt's Figure of Merit</button>
-              <button className="metric-button" type='button'>Speedup</button>
+        {isModalOpen && (
+          <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
+            <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+
+              <div className="modal-header">
+                <h3>Performance & Evaluation Metrics</h3>
+                <button className="modal-close-btn" type="button" onClick={() => setIsModalOpen(false)} title="Close Modal"><FontAwesomeIcon icon={faX} /></button>
+              </div>
+
+              {/* TAB NAVIGATION BAR */}
+              <div className="modal-tabs">
+                <button
+                  type="button"
+                  className={`tab-btn ${activeTable === 'psnr' ? 'active' : ''}`}
+                  onClick={() => setActiveTable('psnr')}
+                >
+                  PSNR
+                </button>
+                <button
+                  type="button"
+                  className={`tab-btn ${activeTable === 'mse_rmse' ? 'active' : ''}`}
+                  onClick={() => setActiveTable('mse_rmse')}
+                >
+                  MSE & RMSE
+                </button>
+                <button
+                  type="button"
+                  className={`tab-btn ${activeTable === 'fom' ? 'active' : ''}`}
+                  onClick={() => setActiveTable('fom')}
+                >
+                  Pratt's FOM
+                </button>
+                <button
+                  type="button"
+                  className={`tab-btn ${activeTable === 'speedup' ? 'active' : ''}`}
+                  onClick={() => setActiveTable('speedup')}
+                >
+                  Speedup
+                </button>
+              </div>
+
+              {/* MODAL BODY */}
+              <div className="modal-body">
+                <table className="modal-table">
+                  <thead>
+                    {activeTable === 'psnr' && (
+                      <tr>
+                        <th>Sample Image</th>
+                        <th>Enhanced PSNR (dB)</th>
+                        <th>Native PSNR (dB)</th>
+                        <th>PSNR Gain (Δ)</th>
+                      </tr>
+                    )}
+
+                    {activeTable === 'mse_rmse' && (
+                      <tr>
+                        <th>Sample Image</th>
+                        <th>Enhanced MSE</th>
+                        <th>Native MSE</th>
+                        <th>MSE Difference</th>
+                        <th>Enhanced RMSE</th>
+                        <th>Native RMSE</th>
+                        <th>RMSE Difference</th>
+                      </tr>
+                    )}
+
+                    {activeTable === 'fom' && (
+                      <tr>
+                        <th>Sample Image</th>
+                        <th>Enhanced Pratt's FOM</th>
+                        <th>Native Pratt's FOM</th>
+                        <th>Localization Gain (Δ)</th>
+                      </tr>
+                    )}
+
+                    {activeTable === 'speedup' && (
+                      <tr>
+                        <th>Sample Image</th>
+                        <th>Native Runtime (s)</th>
+                        <th>Enhanced Runtime (s)</th>
+                        <th>Speedup Factor</th>
+                      </tr>
+                    )}
+                  </thead>
+
+                  <tbody>
+                    {outputs.map((item) => {
+                      const eM = item.enhancedMetrics || {};
+                      const nM = item.nativeMetrics || {};
+
+                      return (
+                        <tr key={item.id}>
+                          <td className="cell-filename" title={item.name}>
+                            {item.name}
+                          </td>
+
+                          {/* PSNR TAB */}
+                          {activeTable === 'psnr' && (
+                            <>
+                              <td>{eM.psnr ?? 'N/A'}</td>
+                              <td>{nM.psnr ?? 'N/A'}</td>
+                              <td className={`highlight-gain ${eM.psnr && nM.psnr
+                                ? (eM.psnr - nM.psnr > 0 ? 'imp' : 'no-imp')
+                                : ''
+                                }`}>
+                                {eM.psnr != null && nM.psnr != null
+                                  ? (eM.psnr - nM.psnr).toFixed(3)
+                                  : 'N/A'}
+                              </td>
+                            </>
+                          )}
+
+                          {/* MSE & RMSE TAB */}
+                          {activeTable === 'mse_rmse' && (
+                            <>
+                              <td>{eM.mse_rmse[0] ?? 'N/A'}</td>
+                              <td>{nM.mse_rmse[0] ?? 'N/A'}</td>
+                              <td className={`mse_rmse ${eM.mse_rmse[0] && eM.mse_rmse[0]
+                                ? (eM.mse_rmse[0] - nM.mse_rmse[0] < 0 ? 'imp' : 'no-imp')
+                                : ''
+                                }`}>{(eM.mse_rmse[0] - nM.mse_rmse[0]).toFixed(4) ?? 'N/A'}</td>
+                              <td>{eM.mse_rmse[1] ?? 'N/A'}</td>
+                              <td>{nM.mse_rmse[1] ?? 'N/A'}</td>
+                              <td className={`mse_rmse ${eM.mse_rmse[1] && nM.mse_rmse[1]
+                                ? (eM.mse_rmse[1] - nM.mse_rmse[1] < 0 ? 'imp' : 'no-imp')
+                                : ''
+                                }`}>{(eM.mse_rmse[1] - nM.mse_rmse[1]).toFixed(4) ?? 'N/A'}</td>
+                            </>
+                          )}
+
+                          {/* PRATT'S FOM TAB */}
+                          {activeTable === 'fom' && (
+                            <>
+                              <td>{eM.fom ?? 'N/A'}</td>
+                              <td>{nM.fom ?? 'N/A'}</td>
+                              <td className={`highlight-gain ${nM.fom && eM.fom
+                                ? (eM.fom - nM.fom > 0 ? 'imp' : 'no-imp')
+                                : ''
+                                }`}>
+                                {eM.fom != null && nM.fom != null
+                                  ? (eM.fom - nM.fom).toFixed(4)
+                                  : 'N/A'}
+                              </td>
+                            </>
+                          )}
+
+                          {/* SPEEDUP TAB */}
+                          {activeTable === 'speedup' && (
+                            <>
+                              <td>{nM.execution_time ? `${nM.execution_time}s` : 'N/A'}</td>
+                              <td>{eM.execution_time ? `${eM.execution_time}s` : 'N/A'}</td>
+                              <td className={`highlight-speedup ${nM.execution_time && eM.execution_time
+                                ? (nM.execution_time > eM.execution_time ? 'imp' : 'no-imp')
+                                : ''
+                                }`}>
+                                {nM.execution_time && eM.execution_time
+                                  ? `${(nM.execution_time / eM.execution_time).toFixed(2)}x`
+                                  : 'N/A'}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className='average-row'>
+                      <td style={{textAlign: 'left'}}>Average</td>
+
+                      {/* PSNR AVERAGE */}
+                      {activeTable === 'psnr' && (
+                        <>
+                          <td>psnr placeholder</td>
+                          <td>psnr placeholder</td>
+                          <td>psnr placeholder</td>
+                        </>
+                      )}
+
+                      {/* MSE RMSE AVERAGE */}
+                      {activeTable === 'mse_rmse' && (
+                        <>
+                          <td>mse_rmse palceholder</td>
+                          <td>mse_rmse palceholder</td>
+                          <td>mse_rmse palceholder</td>
+                          <td>mse_rmse palceholder</td>
+                          <td>mse_rmse palceholder</td>
+                          <td>mse_rmse palceholder</td>
+                        </>
+                      )}
+
+                      {/* FOM AVERAGE */}
+                      {activeTable === 'fom' && (
+                        <>
+                          <td>fom placeholder</td>
+                          <td>fom placeholder</td>
+                          <td>fom placeholder</td>
+                        </>
+                      )}
+
+                      {/* SPEEDUP AVERAGE */}
+                      {activeTable === 'speedup' && (
+                        <>
+                          <td>speedup placeholder</td>
+                          <td>speedup placeholder</td>
+                          <td>speedup placeholder</td>
+                        </>
+                      )}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
             </div>
           </div>
         )}
