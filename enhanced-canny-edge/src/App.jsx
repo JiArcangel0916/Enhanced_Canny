@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMicroscope, faFileImage, faX, faSpinner, faArrowDown, faCircleExclamation, faChartSimple } from '@fortawesome/free-solid-svg-icons'
+import { FaMicroscope, FaFileImage, FaTimes, FaSpinner, FaArrowDown, FaExclamationCircle, FaChartBar, FaExpand, FaFileExport, FaFileImport } from 'react-icons/fa';
+
 import './App.css'
 
 function App() {
@@ -9,16 +9,15 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [expandModal, setExpandModal] = useState(null);
+  const [importedData, setImportedData] = useState(null);
   const [activeTable, setActiveTable] = useState('psnr');
   const fileInputRef = useRef(null);
+  const importInputRef = useRef(null);
 
   const handleFiles = (inputFiles) => {
     const valid = Array.from(inputFiles).filter((file) => file.type.startsWith('image'));
     setFiles(() => {
-      if (valid.length > 10) {
-        alert(`You can only upload a maxmimum of 10 images`);
-        return valid.slice(0, 10);
-      }
       return valid;
     });
 
@@ -145,7 +144,6 @@ function App() {
     const loadImg = (src) => {
       return new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "anonymous";
         img.onload = () => resolve(img);
         img.onerror = (err) => reject(err);
         img.src = src;
@@ -203,6 +201,91 @@ function App() {
 
   const isAllCompleted = outputs.length > 0 && outputs.every((item) => item.enhancedStatus === 'done' && item.nativeStatus === 'done');
 
+  // Export/Import Global Averages
+  const exportProgress = () => {
+    if (!averages) return;
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(averages.rawData));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "global_dataset_average.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const importProgress = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const obj = JSON.parse(event.target.result);
+        if (obj && typeof obj.count === 'number') {
+          setImportedData(obj);
+          alert(`Successfully loaded averages of ${obj.count} images.`);
+        } else {
+          alert("Invalid file format");
+        }
+      } catch (err) {
+        alert("Invalid file format");
+      }
+    };
+    reader.readAsText(file);
+    if (importInputRef.current) importInputRef.current.value = '';
+  };
+
+  // Calculate Dataset Averages
+  const averages = useMemo(() => {
+    let validOutputs = outputs.filter(o => o.enhancedMetrics && o.nativeMetrics);
+    
+    // Base accumulated sums
+    let totalCount = importedData ? importedData.count : 0;
+    let sumEFom = importedData ? importedData.sumEFom : 0;
+    let sumNFom = importedData ? importedData.sumNFom : 0;
+    let sumEMse = importedData ? importedData.sumEMse : 0;
+    let sumNMse = importedData ? importedData.sumNMse : 0;
+    let tNTime = importedData ? importedData.totalNativeTime : 0;
+    let tETime = importedData ? importedData.totalEnhancedTime : 0;
+
+    validOutputs.forEach(o => {
+      totalCount += 1;
+      sumEFom += o.enhancedMetrics.fom;
+      sumNFom += o.nativeMetrics.fom;
+      sumEMse += o.enhancedMetrics.mse_rmse[0];
+      sumNMse += o.nativeMetrics.mse_rmse[0];
+      tNTime += o.nativeMetrics.execution_time;
+      tETime += o.enhancedMetrics.execution_time;
+    });
+
+    if (totalCount === 0) return null;
+
+    // Calculate final averages
+    const avgEnhancedFom = sumEFom / totalCount;
+    const avgNativeFom = sumNFom / totalCount;
+    const avgSpeedupFactor = tETime > 0 ? tNTime / tETime : 0;
+    const avgEnhancedMse = sumEMse / totalCount;
+    const avgNativeMse = sumNMse / totalCount;
+    const avgEnhancedRmse = Math.sqrt(avgEnhancedMse);
+    const avgNativeRmse = Math.sqrt(avgNativeMse);
+
+    // 4. PSNR (Calculate using the Average MSE)
+    const maxPixel = 255.0;
+    const avgEnhancedPsnr = avgEnhancedMse > 0 ? 20 * Math.log10(maxPixel / Math.sqrt(avgEnhancedMse)) : 0;
+    const avgNativePsnr = avgNativeMse > 0 ? 20 * Math.log10(maxPixel / Math.sqrt(avgNativeMse)) : 0;
+
+    return {
+      totalCount,
+      rawData: { count: totalCount, sumEFom, sumNFom, sumEMse, sumNMse, totalNativeTime: tNTime, totalEnhancedTime: tETime },
+      psnr: { e: avgEnhancedPsnr, n: avgNativePsnr, diff: avgEnhancedPsnr - avgNativePsnr },
+      mse_rmse: { 
+        eMse: avgEnhancedMse, nMse: avgNativeMse, mseDiff: avgEnhancedMse - avgNativeMse,
+        eRmse: avgEnhancedRmse, nRmse: avgNativeRmse, rmseDiff: avgEnhancedRmse - avgNativeRmse
+      },
+      fom: { e: avgEnhancedFom, n: avgNativeFom, diff: avgEnhancedFom - avgNativeFom },
+      speedup: { nTime: tNTime, eTime: tETime, factor: avgSpeedupFactor }
+    };
+  }, [outputs, importedData]);
+
   return (
     <>
       {/* HEADER SECTION */}
@@ -225,8 +308,10 @@ function App() {
               accept="image/*"
               className="sys-file-input"
             />
-            <FontAwesomeIcon icon={faMicroscope} className='microscope-svg' />
+            <FaMicroscope className='microscope-svg' />
             <span className="drop-hint">Drag and drop microscopic images <br /> of water samples here</span>
+            <span className="drop-or" style={{ margin: '10px 0', color: 'var(--text-muted, #8399b7)', fontSize: '0.9rem' }}>— or —</span>
+            <button type="button" className="browse-files-btn" onClick={() => fileInputRef.current?.click()} style={{ padding: '8px 16px', backgroundColor: 'var(--primary, #015b87)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem', transition: '0.2s', marginTop: '5px' }}>Browse Files</button>
           </div>
 
           <button type="submit" className="submit-files" disabled={isLoading || files.length === 0}>
@@ -241,21 +326,21 @@ function App() {
           </button>
           {files.length > 0 && (
             <div className="files-list">
-              <ul>
+              <ul style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '5px' }}>
                 {files.map((file, index) => (
                   <li key={`${file.name}-${index}`} className='file-item'>
                     <div className="file-info">
-                      <FontAwesomeIcon icon={faFileImage} className='file-icon' />
+                      <FaFileImage className='file-icon' />
                       <span className="file-name" title={file.name}>{file.name}</span>
                       <span className="file-size">({(file.size / 1024).toFixed(1)} KB)</span>
                       <button className="remove-file-btn" type='button' onClick={() => { removeFile(index) }} title='Remove File'>
-                        <FontAwesomeIcon icon={faX} />
+                        <FaTimes />
                       </button>
                     </div>
                   </li>
                 ))}
               </ul>
-              <button type='button' className='clear-all-btn' onClick={() => { setFiles([]); setOutputs([]) }}>Clear and Reset</button>
+              <button type='button' className='clear-all-btn' onClick={() => { setFiles([]); setOutputs([]); setIsLoading(false); }}>Clear and Reset</button>
             </div>
           )}
         </form>
@@ -266,14 +351,28 @@ function App() {
             <div key={item.id} className='result-card'>
               <div className="card-top">
                 <strong className="card-file-name" title={item.name}>{item.name}</strong>
-                <button className="download-output" type='button' disabled={item.nativeStatus !== 'done' || item.enhancedStatus !== 'done'} onClick={() => handleDownload(item.origURL, item.enhancedURL, item.nativeURL, item.name)}><FontAwesomeIcon icon={faArrowDown} />Download</button>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <button className="download-output" type="button" disabled={item.nativeStatus !== 'done' || item.enhancedStatus !== 'done'} onClick={() => setExpandModal({ type: 'compare', title: item.name, original: item.origURL, enhanced: item.enhancedURL, native: item.nativeURL })} style={{ width: 'auto', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FaExpand />Expand
+                  </button>
+                  <button className="download-output" type='button' disabled={item.nativeStatus !== 'done' || item.enhancedStatus !== 'done'} onClick={() => handleDownload(item.origURL, item.enhancedURL, item.nativeURL, item.name)} style={{ width: 'auto', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FaArrowDown />Download
+                  </button>
+                </div>
               </div>
 
               <div className="comparison-grid">
                 {/* Left: Input Image */}
                 <div className="sample-panel">
                   <div className="square-placeholder">
-                    <img className="sample-image" src={item.origURL} alt={`Input: ${item.name}`} />
+                    <img 
+                      className="sample-image" 
+                      src={item.origURL} 
+                      alt={`Input: ${item.name}`} 
+                      title="Click to expand"
+                      style={{ cursor: 'zoom-in' }}
+                      onClick={() => setExpandModal({ type: 'single', title: `Input Image: ${item.name}`, url: item.origURL })}
+                    />
                   </div>
                   <div className="panel-badge">Original Image</div>
                 </div>
@@ -283,7 +382,7 @@ function App() {
                   <div className="square-placeholder">
                     {item.enhancedStatus === 'processing' && (
                       <div className="placeholder-status">
-                        <FontAwesomeIcon icon={faSpinner} spin className="spinner-icon" />
+                        <FaSpinner className="spinner-icon spin" />
                         <span>Processing Enhanced...</span>
                       </div>
                     )}
@@ -293,12 +392,15 @@ function App() {
                         src={item.enhancedURL}
                         alt={`Enhanced Canny output for ${item.name}`}
                         className="sample-image"
+                        title="Click to expand"
+                        style={{ cursor: 'zoom-in' }}
+                        onClick={() => setExpandModal({ type: 'single', title: `Enhanced Canny Edge: ${item.name}`, url: item.enhancedURL })}
                       />
                     )}
 
                     {item.enhancedStatus === 'error' && (
                       <div className="placeholder-status error">
-                        <FontAwesomeIcon icon={faCircleExclamation} />
+                        <FaExclamationCircle />
                         <span>Detection Failed</span>
                       </div>
                     )}
@@ -311,7 +413,7 @@ function App() {
                   <div className="square-placeholder">
                     {item.nativeStatus === 'processing' && (
                       <div className="placeholder-status">
-                        <FontAwesomeIcon icon={faSpinner} spin className="spinner-icon" />
+                        <FaSpinner className="spinner-icon spin" />
                         <span>Processing Native...</span>
                       </div>
                     )}
@@ -321,12 +423,15 @@ function App() {
                         src={item.nativeURL}
                         alt={`Native Canny output for ${item.name}`}
                         className="sample-image"
+                        title="Click to expand"
+                        style={{ cursor: 'zoom-in' }}
+                        onClick={() => setExpandModal({ type: 'single', title: `Native Canny Edge: ${item.name}`, url: item.nativeURL })}
                       />
                     )}
 
                     {item.nativeStatus === 'error' && (
                       <div className="placeholder-status error">
-                        <FontAwesomeIcon icon={faCircleExclamation} />
+                        <FaExclamationCircle />
                         <span>Detection Failed</span>
                       </div>
                     )}
@@ -339,9 +444,24 @@ function App() {
         </div>
 
         {/* BUTTONS FOR VIEWING MEASUREMENTS */}
-        {isAllCompleted && (
-          <button className='metric-button' onClick={() => { setIsModalOpen(true) }}><FontAwesomeIcon icon={faChartSimple} className="chart-symbol" />View Comparison Metrics</button>
-        )}
+        <div style={{ display: 'flex', gap: '15px', marginTop: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          {(isAllCompleted || importedData) && averages && (
+            <button className='metric-button' onClick={() => { setIsModalOpen(true) }}>
+              <FaChartBar className="chart-symbol" />View Comparison Metrics
+            </button>
+          )}
+
+          {(isAllCompleted || importedData) && averages && (
+            <button className='metric-button' onClick={exportProgress} style={{ backgroundColor: 'var(--primary)', border: '1px solid #000' }}>
+              <FaFileExport className="chart-symbol" />Save Global Average
+            </button>
+          )}
+
+          <button className='metric-button' onClick={() => importInputRef.current?.click()} style={{ backgroundColor: 'var(--card-bg)', border: '1px solid #444', color: '#fff' }}>
+            <FaFileImport className="chart-symbol" />Load Global Average
+          </button>
+          <input type="file" ref={importInputRef} style={{ display: 'none' }} accept=".json" onChange={importProgress} />
+        </div>
 
         {isModalOpen && (
           <div className="modal-overlay" onClick={() => setIsModalOpen(false)}>
@@ -349,7 +469,7 @@ function App() {
 
               <div className="modal-header">
                 <h3>Performance & Evaluation Metrics</h3>
-                <button className="modal-close-btn" type="button" onClick={() => setIsModalOpen(false)} title="Close Modal"><FontAwesomeIcon icon={faX} /></button>
+                <button className="modal-close-btn" type="button" onClick={() => setIsModalOpen(false)} title="Close Modal"><FaTimes /></button>
               </div>
 
               {/* TAB NAVIGATION BAR */}
@@ -385,8 +505,12 @@ function App() {
               </div>
 
               {/* MODAL BODY */}
-              <div className="modal-body">
-                <table className="modal-table">
+              <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', position: 'relative', padding: 0 }}>
+                <style>{`
+                  .modal-table thead th { position: sticky; top: 0; z-index: 10; background-color: var(--card-bg, #051B33); box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+                  .modal-table tfoot td { position: sticky; bottom: 0; z-index: 10; background-color: var(--card-bg, #051B33); box-shadow: 0 -2px 5px rgba(0,0,0,0.2); }
+                `}</style>
+                <table className="modal-table" style={{ margin: 0 }}>
                   <thead>
                     {activeTable === 'psnr' && (
                       <tr>
@@ -510,44 +634,57 @@ function App() {
                   </tbody>
                   <tfoot>
                     <tr className='average-row'>
-                      <td style={{textAlign: 'left'}}>Average</td>
+                      <td style={{textAlign: 'left'}}>
+                        <strong>Global Dataset Average</strong>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>(N={averages ? averages.totalCount : 0} images)</div>
+                      </td>
 
                       {/* PSNR AVERAGE */}
-                      {activeTable === 'psnr' && (
+                      {activeTable === 'psnr' && averages && (
                         <>
-                          <td>psnr placeholder</td>
-                          <td>psnr placeholder</td>
-                          <td>psnr placeholder</td>
+                          <td>{averages.psnr.e.toFixed(3)}</td>
+                          <td>{averages.psnr.n.toFixed(3)}</td>
+                          <td className={`highlight-gain ${averages.psnr.diff > 0 ? 'imp' : 'no-imp'}`}>
+                            {averages.psnr.diff.toFixed(3)}
+                          </td>
                         </>
                       )}
 
                       {/* MSE RMSE AVERAGE */}
-                      {activeTable === 'mse_rmse' && (
+                      {activeTable === 'mse_rmse' && averages && (
                         <>
-                          <td>mse_rmse palceholder</td>
-                          <td>mse_rmse palceholder</td>
-                          <td>mse_rmse palceholder</td>
-                          <td>mse_rmse palceholder</td>
-                          <td>mse_rmse palceholder</td>
-                          <td>mse_rmse palceholder</td>
+                          <td>{averages.mse_rmse.eMse.toFixed(4)}</td>
+                          <td>{averages.mse_rmse.nMse.toFixed(4)}</td>
+                          <td className={`mse_rmse ${averages.mse_rmse.mseDiff < 0 ? 'imp' : 'no-imp'}`}>
+                            {averages.mse_rmse.mseDiff.toFixed(4)}
+                          </td>
+                          <td>{averages.mse_rmse.eRmse.toFixed(4)}</td>
+                          <td>{averages.mse_rmse.nRmse.toFixed(4)}</td>
+                          <td className={`mse_rmse ${averages.mse_rmse.rmseDiff < 0 ? 'imp' : 'no-imp'}`}>
+                            {averages.mse_rmse.rmseDiff.toFixed(4)}
+                          </td>
                         </>
                       )}
 
                       {/* FOM AVERAGE */}
-                      {activeTable === 'fom' && (
+                      {activeTable === 'fom' && averages && (
                         <>
-                          <td>fom placeholder</td>
-                          <td>fom placeholder</td>
-                          <td>fom placeholder</td>
+                          <td>{averages.fom.e.toFixed(4)}</td>
+                          <td>{averages.fom.n.toFixed(4)}</td>
+                          <td className={`highlight-gain ${averages.fom.diff > 0 ? 'imp' : 'no-imp'}`}>
+                            {averages.fom.diff.toFixed(4)}
+                          </td>
                         </>
                       )}
 
                       {/* SPEEDUP AVERAGE */}
-                      {activeTable === 'speedup' && (
+                      {activeTable === 'speedup' && averages && (
                         <>
-                          <td>speedup placeholder</td>
-                          <td>speedup placeholder</td>
-                          <td>speedup placeholder</td>
+                          <td>{averages.speedup.nTime.toFixed(2)}s (Total)</td>
+                          <td>{averages.speedup.eTime.toFixed(2)}s (Total)</td>
+                          <td className={`highlight-speedup ${averages.speedup.factor > 1 ? 'imp' : 'no-imp'}`}>
+                            {averages.speedup.factor.toFixed(2)}x
+                          </td>
                         </>
                       )}
                     </tr>
@@ -555,6 +692,49 @@ function App() {
                 </table>
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* IMAGE EXPAND MODAL */}
+        {expandModal && (
+          <div className="modal-overlay" onClick={() => setExpandModal(null)} style={{ zIndex: 2000 }}>
+            <div 
+              className="modal-container" 
+              onClick={(e) => e.stopPropagation()}
+              style={{ width: expandModal.type === 'compare' ? '95%' : 'auto', maxWidth: '1600px', padding: '30px' }}
+            >
+              <div className="modal-header">
+                <h3>{expandModal.title}</h3>
+                <button className="modal-close-btn" type="button" onClick={() => setExpandModal(null)} title="Close Modal">
+                  <FaTimes />
+                </button>
+              </div>
+              <div className="modal-body" style={{ display: 'flex', justifyContent: 'center', gap: '20px', alignItems: 'center' }}>
+                {expandModal.type === 'single' && (
+                  <img 
+                    src={expandModal.url} 
+                    alt={expandModal.title} 
+                    style={{ maxHeight: '75vh', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }} 
+                  />
+                )}
+                {expandModal.type === 'compare' && (
+                  <>
+                    <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+                      <h4 style={{ marginBottom: '10px' }}>Input Image</h4>
+                      <img src={expandModal.original} alt="Input" style={{ maxHeight: '70vh', width: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #444' }} />
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+                      <h4 style={{ marginBottom: '10px', color: '#646cff' }}>Enhanced Canny Edge</h4>
+                      <img src={expandModal.enhanced} alt="Enhanced" style={{ maxHeight: '70vh', width: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #444' }} />
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'center', minWidth: 0 }}>
+                      <h4 style={{ marginBottom: '10px', color: '#ff6b6b' }}>Native Canny Edge</h4>
+                      <img src={expandModal.native} alt="Native" style={{ maxHeight: '70vh', width: '100%', objectFit: 'contain', borderRadius: '8px', border: '1px solid #444' }} />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -137,7 +137,8 @@ main {
 }
 
 .files-list {
-  width: 40%;
+  width: 80%;
+  max-width: 600px;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -539,4 +540,22 @@ footer {
   color: var(--text-muted);
   max-width: 600px;
   margin: 0 auto;
+}
+.spin { animation: spin 1s linear infinite; }
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
