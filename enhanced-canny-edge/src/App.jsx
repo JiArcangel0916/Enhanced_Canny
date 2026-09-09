@@ -237,7 +237,7 @@ function App() {
   // Calculate Dataset Averages
   const averages = useMemo(() => {
     let validOutputs = outputs.filter(o => o.enhancedMetrics && o.nativeMetrics);
-    
+
     // Base accumulated sums
     let totalCount = importedData ? importedData.count : 0;
     let sumEFom = importedData ? importedData.sumEFom : 0;
@@ -277,7 +277,7 @@ function App() {
       totalCount,
       rawData: { count: totalCount, sumEFom, sumNFom, sumEMse, sumNMse, totalNativeTime: tNTime, totalEnhancedTime: tETime },
       psnr: { e: avgEnhancedPsnr, n: avgNativePsnr, diff: avgEnhancedPsnr - avgNativePsnr },
-      mse_rmse: { 
+      mse_rmse: {
         eMse: avgEnhancedMse, nMse: avgNativeMse, mseDiff: avgEnhancedMse - avgNativeMse,
         eRmse: avgEnhancedRmse, nRmse: avgNativeRmse, rmseDiff: avgEnhancedRmse - avgNativeRmse
       },
@@ -340,8 +340,10 @@ function App() {
                   </li>
                 ))}
               </ul>
-              <button type='button' className='clear-all-btn' onClick={() => { setFiles([]); setOutputs([]); setIsLoading(false); }}>Clear and Reset</button>
             </div>
+          )}
+          {( importedData || files.length !== 0 ) && (
+            <button type='button' className='clear-all-btn' onClick={() => { setFiles([]); setOutputs([]); setIsLoading(false); setImportedData(null); }}>Clear and Reset</button>
           )}
         </form>
 
@@ -365,10 +367,10 @@ function App() {
                 {/* Left: Input Image */}
                 <div className="sample-panel">
                   <div className="square-placeholder">
-                    <img 
-                      className="sample-image" 
-                      src={item.origURL} 
-                      alt={`Input: ${item.name}`} 
+                    <img
+                      className="sample-image"
+                      src={item.origURL}
+                      alt={`Input: ${item.name}`}
                       title="Click to expand"
                       style={{ cursor: 'zoom-in' }}
                       onClick={() => setExpandModal({ type: 'single', title: `Input Image: ${item.name}`, url: item.origURL })}
@@ -444,19 +446,20 @@ function App() {
         </div>
 
         {/* BUTTONS FOR VIEWING MEASUREMENTS */}
-        <div style={{ display: 'flex', gap: '15px', marginTop: '20px', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {(isAllCompleted || importedData) && averages && (
-            <button className='metric-button' onClick={() => { setIsModalOpen(true) }}>
-              <FaChartBar className="chart-symbol" />View Comparison Metrics
-            </button>
-          )}
+        <div className="view-measurments-btn">
+          <div className="metric-options-btns">
+            {(isAllCompleted || importedData) && averages && (
+              <button className='metric-button' onClick={() => { setIsModalOpen(true) }}>
+                <FaChartBar className="chart-symbol" />View Comparison Metrics
+              </button>
+            )}
 
-          {(isAllCompleted || importedData) && averages && (
-            <button className='metric-button' onClick={exportProgress} style={{ backgroundColor: 'var(--primary)', border: '1px solid #000' }}>
-              <FaFileExport className="chart-symbol" />Save Global Average
-            </button>
-          )}
-
+            {(isAllCompleted || importedData) && averages && (
+              <button className='metric-button' onClick={exportProgress} style={{ backgroundColor: 'var(--primary)', border: '1px solid #000' }}>
+                <FaFileExport className="chart-symbol" />Save Global Average
+              </button>
+            )}
+          </div>
           <button className='metric-button' onClick={() => importInputRef.current?.click()} style={{ backgroundColor: 'var(--card-bg)', border: '1px solid #444', color: '#fff' }}>
             <FaFileImport className="chart-symbol" />Load Global Average
           </button>
@@ -634,7 +637,7 @@ function App() {
                   </tbody>
                   <tfoot>
                     <tr className='average-row'>
-                      <td style={{textAlign: 'left'}}>
+                      <td style={{ textAlign: 'left' }}>
                         <strong>Global Dataset Average</strong>
                         <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>(N={averages ? averages.totalCount : 0} images)</div>
                       </td>
@@ -699,8 +702,8 @@ function App() {
         {/* IMAGE EXPAND MODAL */}
         {expandModal && (
           <div className="modal-overlay" onClick={() => setExpandModal(null)} style={{ zIndex: 2000 }}>
-            <div 
-              className="modal-container" 
+            <div
+              className="modal-container"
               onClick={(e) => e.stopPropagation()}
               style={{ width: expandModal.type === 'compare' ? '95%' : 'auto', maxWidth: '1600px', padding: '30px' }}
             >
@@ -712,10 +715,10 @@ function App() {
               </div>
               <div className="modal-body" style={{ display: 'flex', justifyContent: 'center', gap: '20px', alignItems: 'center' }}>
                 {expandModal.type === 'single' && (
-                  <img 
-                    src={expandModal.url} 
-                    alt={expandModal.title} 
-                    style={{ maxHeight: '75vh', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }} 
+                  <img
+                    src={expandModal.url}
+                    alt={expandModal.title}
+                    style={{ maxHeight: '75vh', maxWidth: '100%', objectFit: 'contain', borderRadius: '8px' }}
                   />
                 )}
                 {expandModal.type === 'compare' && (
