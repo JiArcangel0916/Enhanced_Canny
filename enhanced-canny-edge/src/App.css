@@ -1099,12 +1099,79 @@ footer {
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE (Mobile & Tablet)
    ============================================================ */
 @media (max-width: 768px) {
-  main { padding: 0 1rem; }
+  /* Layout */
+  main { padding: 0 0.8rem; }
+  
+  /* Typography */
+  .sys-title { font-size: 1.8rem; }
+  .sys-subtitle { font-size: 0.9rem; margin-bottom: 1rem; }
+  
+  /* Input Section */
+  .sys-input-container { padding: 1.5rem 1rem; }
+  .dropzone { min-height: 120px; }
+  
+  /* Cards */
   .output-grid { grid-template-columns: 1fr; }
-  .side-by-side-wrap { grid-template-columns: 1fr; }
-  .comparison-toolbar { flex-direction: column; gap: 0.5rem; }
-  .modal-container { width: 96%; max-width: 100%; }
+  .card-top { flex-direction: column; align-items: stretch; gap: 0.6rem; }
+  .card-actions { width: 100%; display: flex; gap: 0.5rem; }
+  .card-action-btn { flex: 1; justify-content: center; font-size: 0.8rem; }
+  
+  /* Metrics inside cards */
+  .metric-strip { grid-template-columns: 1fr 1fr; gap: 0.5rem; padding: 0.75rem; }
+  
+  /* Comparison Modal Toolbar */
+  .comparison-toolbar { flex-direction: column; align-items: stretch; gap: 0.8rem; padding: 0.75rem; }
+  .toolbar-group { flex-wrap: wrap; justify-content: center; width: 100%; gap: 0.5rem; }
+  .toolbar-group label { width: 100%; text-align: center; margin-bottom: 0.25rem; }
+  .mode-btn, .zoom-btn { flex: 1; min-width: 30%; justify-content: center; }
+  .toolbar-divider { display: none; }
+  
+  /* Comparison Modal Canvas */
+  .side-by-side-wrap { grid-template-columns: 1fr; gap: 1rem; padding: 1rem; }
+  .side-by-side-panel { overflow: visible; background: transparent; }
+  .side-by-side-panel img { max-height: 40vh; margin-top: 1rem; }
+  .side-panel-label { position: relative; display: inline-block; top: 0; left: 0; margin-bottom: 0.25rem; }
+  .comparison-canvas { min-height: 350px; max-height: none; }
+  
+  /* Overlay Controls */
+  .overlay-controls {
+    flex-direction: column;
+    width: 90%;
+    bottom: 1rem;
+    padding: 1rem;
+    gap: 0.5rem;
+  }
+  .overlay-controls input[type="range"] { width: 100%; margin: 0.25rem 0; }
+  .overlay-controls label { width: 100%; text-align: center; }
+  
+  /* Metric View Buttons */
+  .view-measurments-btn { gap: 0.75rem; width: 100%; padding: 0 1rem; }
+  .metric-options-btns { flex-direction: column; width: 100%; gap: 0.75rem; }
+  .metric-button { width: 100%; justify-content: center; }
+  
+  /* Metrics Modal */
+  .modal-container { width: 95%; max-width: 100%; max-height: 95vh; }
+  .modal-tabs { 
+    flex-wrap: nowrap; 
+    overflow-x: auto; 
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+  }
+  .tab-btn { white-space: nowrap; flex-shrink: 0; }
+  
+  /* Tables */
+  .modal-body { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0; }
+  .modal-table { min-width: 600px; /* Force scroll on small screens */ }
+  .modal-table th, .modal-table td { font-size: 0.8rem; padding: 0.6rem 0.5rem; white-space: nowrap; }
+}
+
+@media (max-width: 480px) {
+  /* Smaller phones */
+  .metric-strip { grid-template-columns: 1fr; }
+  .sys-title { font-size: 1.5rem; }
+  .card-actions { flex-direction: column; }
+  .modal-table { min-width: 800px; }
 }
