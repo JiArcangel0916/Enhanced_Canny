@@ -1,0 +1,3 @@
+@echo off
+echo Starting Microorganism Detection System...
+npm start

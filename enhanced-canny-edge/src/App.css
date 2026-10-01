@@ -643,12 +643,13 @@ main {
 /* Side by side mode */
 .side-by-side-wrap {
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 2px;
   background: var(--border-subtle);
   width: 100%;
   height: 100%;
 }
+.side-by-side-wrap.three-cols { grid-template-columns: 1fr 1fr 1fr; }
+.side-by-side-wrap.two-cols { grid-template-columns: 1fr 1fr; }
 
 .side-by-side-panel {
   position: relative;
@@ -1130,17 +1131,24 @@ footer {
   .toolbar-divider { display: none; }
   
   /* Comparison Modal Canvas */
-  .side-by-side-wrap { grid-template-columns: 1fr; gap: 1rem; padding: 1rem; }
-  .side-by-side-panel { overflow: visible; background: transparent; }
+  .side-by-side-wrap, .side-by-side-wrap.three-cols, .side-by-side-wrap.two-cols { grid-template-columns: 1fr; gap: 1rem; padding: 1rem; }
+  .side-by-side-panel { overflow: hidden; background: transparent; }
   .side-by-side-panel img { max-height: 40vh; margin-top: 1rem; }
-  .side-panel-label { position: relative; display: inline-block; top: 0; left: 0; margin-bottom: 0.25rem; }
+  .side-panel-label { position: relative; display: inline-block; top: 0; left: 0; margin-bottom: 0.25rem; z-index: 10; }
   .comparison-canvas { min-height: 350px; max-height: none; }
   
   /* Overlay Controls */
+  .overlay-wrap {
+    flex-direction: column;
+  }
   .overlay-controls {
     flex-direction: column;
     width: 90%;
-    bottom: 1rem;
+    position: relative;
+    bottom: auto;
+    left: auto;
+    transform: none;
+    margin: 1rem auto;
     padding: 1rem;
     gap: 0.5rem;
   }
@@ -1165,7 +1173,7 @@ footer {
   /* Tables */
   .modal-body { overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 0; }
   .modal-table { min-width: 600px; /* Force scroll on small screens */ }
-  .modal-table th, .modal-table td { font-size: 0.8rem; padding: 0.6rem 0.5rem; white-space: nowrap; }
+  .modal-table th, .modal-table td { font-size: 0.75rem; padding: 0.5rem 0.4rem; white-space: nowrap; }
 }
 
 @media (max-width: 480px) {
@@ -1173,5 +1181,5 @@ footer {
   .metric-strip { grid-template-columns: 1fr; }
   .sys-title { font-size: 1.5rem; }
   .card-actions { flex-direction: column; }
-  .modal-table { min-width: 800px; }
+  .modal-table { min-width: 600px; }
 }

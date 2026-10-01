@@ -93,6 +93,22 @@ function ComparisonViewer({ originalURL, enhancedURL, nativeURL, fileName }) {
     });
   };
 
+  const handleTouchStart = (e) => {
+    if (zoom <= 1) return;
+    setIsDraggingPan(true);
+    const touch = e.touches[0];
+    dragStart.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDraggingPan) return;
+    const touch = e.touches[0];
+    setPan({
+      x: touch.clientX - dragStart.current.x,
+      y: touch.clientY - dragStart.current.y
+    });
+  };
+
   const handleMouseUpOrLeave = () => setIsDraggingPan(false);
 
   return (
@@ -130,16 +146,21 @@ function ComparisonViewer({ originalURL, enhancedURL, nativeURL, fileName }) {
         style={{ 
           overflow: 'hidden', 
           cursor: zoom > 1 ? (isDraggingPan ? 'grabbing' : 'grab') : 'default',
-          userSelect: 'none'
+          userSelect: 'none',
+          touchAction: zoom > 1 ? 'none' : 'auto'
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUpOrLeave}
         onMouseLeave={handleMouseUpOrLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleMouseUpOrLeave}
+        onTouchCancel={handleMouseUpOrLeave}
       >
         {/* ── SIDE BY SIDE ─────────────────────────────── */}
         {mode === 'side' && (
-          <div className="side-by-side-wrap" style={{ gridTemplateColumns: originalURL ? '1fr 1fr 1fr' : '1fr 1fr' }}>
+          <div className={`side-by-side-wrap ${originalURL ? 'three-cols' : 'two-cols'}`}>
             {originalURL && (
               <div className="side-by-side-panel">
                 <span className="side-panel-label original-label">Original</span>
@@ -283,16 +304,21 @@ function App() {
       nativeURL: null,
       enhancedMetrics: null,
       nativeMetrics: null,
-      enhancedStatus: 'processing',
+      enhancedStatus: 'queued',
       nativeStatus: 'queued',
       fileRef: file,
     }));
 
     setOutputs(initialOutputs);
 
-    // Queue 1: Process all Enhanced Canny (Fast, finishes quickly)
+    // Process all Enhanced Canny images continuously and independently
     const runEnhancedQueue = async () => {
       for (const item of initialOutputs) {
+        setOutputs((prev) =>
+          prev.map((o) =>
+            o.id === item.id ? { ...o, enhancedStatus: 'processing' } : o
+          )
+        );
         const fd = new FormData();
         fd.append('image', item.fileRef);
         try {
@@ -317,16 +343,14 @@ function App() {
       }
     };
 
-    // Queue 2: Process all Native Canny (Slower, runs alongside Enhanced)
+    // Process all Native Canny images continuously and independently
     const runNativeQueue = async () => {
       for (const item of initialOutputs) {
-        // Mark current item as processing
         setOutputs((prev) =>
           prev.map((o) =>
             o.id === item.id ? { ...o, nativeStatus: 'processing' } : o
           )
         );
-
         const fd = new FormData();
         fd.append('image', item.fileRef);
         try {
@@ -351,7 +375,6 @@ function App() {
       }
     };
 
-    // Run both queues concurrently
     await Promise.all([runEnhancedQueue(), runNativeQueue()]);
     setIsLoading(false);
   };
@@ -617,10 +640,10 @@ function App() {
                     </div>
                   </div>
                   <div className="card-image-wrap">
-                    {item.enhancedStatus === 'processing' && (
+                    {(item.enhancedStatus === 'processing' || item.enhancedStatus === 'queued') && (
                       <div className="placeholder-status">
                         <FaSpinner className="spinner-icon spin" />
-                        <span>Detecting edges…</span>
+                        <span>{item.enhancedStatus === 'queued' ? 'Queued…' : 'Detecting edges…'}</span>
                       </div>
                     )}
                     {item.enhancedStatus === 'done' && (
@@ -645,7 +668,7 @@ function App() {
                       </div>
                     )}
                     {item.enhancedStatus === 'done' && <span className="card-status-label done">Complete</span>}
-                    {item.enhancedStatus === 'processing' && <span className="card-status-label processing">Processing</span>}
+                    {(item.enhancedStatus === 'processing' || item.enhancedStatus === 'queued') && <span className="card-status-label processing">{item.enhancedStatus === 'queued' ? 'Queued' : 'Processing'}</span>}
                     {item.enhancedStatus === 'error' && <span className="card-status-label error">Error</span>}
                   </div>
                   {item.enhancedMetrics && (
@@ -709,7 +732,7 @@ function App() {
                     {(item.nativeStatus === 'processing' || item.nativeStatus === 'queued') && (
                       <div className="placeholder-status">
                         <FaSpinner className="spinner-icon spin" />
-                        <span>{item.nativeStatus === 'queued' ? 'Queued — waiting for Enhanced…' : 'Detecting edges…'}</span>
+                        <span>{item.nativeStatus === 'queued' ? 'Queued…' : 'Detecting edges…'}</span>
                       </div>
                     )}
                     {item.nativeStatus === 'done' && (
@@ -823,7 +846,7 @@ function App() {
                 </div>
               )}
 
-              <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto', position: 'relative', padding: 0 }}>
+              <div className="modal-body" style={{ maxHeight: '60vh', overflow: 'auto', position: 'relative', padding: 0, WebkitOverflowScrolling: 'touch' }}>
                 <table className="modal-table" style={{ margin: 0 }}>
                   <thead>
                     {activeTable === 'psnr' && (
@@ -968,7 +991,7 @@ function App() {
                 />
                 {/* Inline metrics comparison below the viewer */}
                 {expandModal.enhancedMetrics && expandModal.nativeMetrics && (
-                  <div style={{ marginTop: '1rem' }}>
+                  <div style={{ marginTop: '1rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                     <table className="modal-table" style={{ fontSize: '0.85rem' }}>
                       <thead>
                         <tr>

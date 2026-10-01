@@ -1,0 +1,11 @@
+{
+  "name": "enhanced-canny-system",
+  "version": "1.0.0",
+  "description": "Root package to run both frontend and backend concurrently",
+  "scripts": {
+    "start": "npx concurrently \"npm run dev --prefix enhanced-canny-edge\" \"cd enhanced-canny-edge/api && python index.py\""
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
