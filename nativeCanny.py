@@ -52,8 +52,8 @@ def apply_gaussian_blur(image, kernel_size):
         for j in range(k_half, cols - k_half):
             output[i, j] = np.sum(image[i - k_half: i + k_half + 1, j - k_half: j + k_half + 1] * kernel)
 
-    # get the image without the padding
-    return output[k_half:rows-k_half, k_half:cols-k_half]
+    # return the image with the same dimensions (edges will be 0)
+    return output
 
 
 def compute_gradient_magnitude_and_orientation(image, sobel_kernel_size):

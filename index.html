@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0"/>
+<title>Edge Detection Comparison &mdash; Enhanced vs Native Canny</title>
+<meta name="description" content="Interactive visual comparison of Native Canny vs Enhanced Canny edge detection with overlay, toggle, swipe, and zoom tools."/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
+<style>
+/* Overlay color composite canvas */
+#ov-canvas{display:block;width:100%;border-radius:var(--r);border:1px solid var(--border)}
+.ov-legend{display:flex;align-items:center;justify-content:center;gap:1.5rem;margin-top:.55rem;flex-wrap:wrap}
+.ov-leg-item{display:flex;align-items:center;gap:.4rem;font-size:.74rem;font-weight:600}
+.ov-leg-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
+/* Partial result skeleton / loading shimmer */
+.img-pending{position:relative;background:var(--surface2);border-radius:var(--r);overflow:hidden;min-height:120px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:.5rem;color:var(--muted);font-size:.75rem}
+.img-pending::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.04) 50%,transparent 100%);animation:shimmer 1.4s infinite;}
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.spinner{width:22px;height:22px;border:2.5px solid rgba(255,255,255,.08);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c12;--surface:#12141e;--surface2:#1a1d2e;--surface3:#22263a;
+  --border:rgba(255,255,255,.07);
+  --accent:#6c63ff;--accent2:#00d4aa;--accent3:#ff6b6b;
+  --text:#e8eaf0;--muted:#6b7280;
+  --r:14px;--shadow:0 8px 32px rgba(0,0,0,.45);
+  --ease:.2s cubic-bezier(.4,0,.2,1);
+}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(ellipse 60% 40% at 20% 10%,rgba(108,99,255,.12) 0%,transparent 60%),
+    radial-gradient(ellipse 50% 35% at 85% 80%,rgba(0,212,170,.08) 0%,transparent 55%);
+}
+
+/* HEADER */
+header{
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(20px);background:rgba(10,12,18,.85);
+  border-bottom:1px solid var(--border);
+  padding:.8rem 1.25rem;
+  display:flex;align-items:center;gap:.75rem;
+}
+.logo{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:1rem;letter-spacing:-.02em}
+.logo-icon{
+  width:30px;height:30px;border-radius:8px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  display:grid;place-items:center;font-size:.85rem;flex-shrink:0;
+}
+.logo-sub{font-size:.68rem;color:var(--muted);font-weight:400;display:block}
+.hbadge{
+  margin-left:auto;
+  background:linear-gradient(135deg,rgba(108,99,255,.18),rgba(0,212,170,.14));
+  border:1px solid rgba(108,99,255,.3);border-radius:20px;
+  padding:.2rem .6rem;font-size:.65rem;font-weight:700;letter-spacing:.06em;color:var(--accent2);white-space:nowrap;
+}
+
+/* LAYOUT */
+main{position:relative;z-index:1;display:grid;grid-template-columns:320px 1fr;min-height:calc(100vh - 54px)}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+
+/* SIDEBAR */
+aside{
+  background:var(--surface);border-right:1px solid var(--border);
+  padding:1rem;overflow-y:auto;display:flex;flex-direction:column;gap:.85rem;
+  max-height:calc(100vh - 54px);position:sticky;top:54px;
+}
+@media(max-width:860px){aside{max-height:none;position:relative;top:0;border-right:none;border-bottom:1px solid var(--border)}}
+
+.sec-label{
+  font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);
+  margin-bottom:.4rem;padding-bottom:.25rem;border-bottom:1px solid var(--border);
+}
+
+/* Drop zone */
+#drop-zone{
+  border:2px dashed rgba(108,99,255,.4);border-radius:var(--r);
+  padding:1.25rem .75rem;text-align:center;cursor:pointer;
+  transition:var(--ease);background:rgba(108,99,255,.04);position:relative;
+}
+#drop-zone:hover,#drop-zone.hover{border-color:var(--accent);background:rgba(108,99,255,.1)}
+#drop-zone .dz-icon{font-size:1.8rem;margin-bottom:.3rem;display:block}
+#drop-zone p{font-size:.76rem;color:var(--muted);line-height:1.5}
+#drop-zone strong{color:var(--accent)}
+#file-input{position:absolute;inset:0;opacity:0;cursor:pointer}
+#preview-thumb{width:100%;border-radius:10px;object-fit:contain;max-height:100px;display:none;border:1px solid var(--border);background:#000;margin-top:.5rem}
+
+/* Param card */
+.pcard{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:.8rem}
+.atag{
+  display:inline-flex;align-items:center;gap:.3rem;
+  font-size:.63rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  border-radius:20px;padding:.18rem .5rem;margin-bottom:.6rem;
+}
+.tag-n{background:rgba(255,107,107,.15);color:var(--accent3);border:1px solid rgba(255,107,107,.25)}
+.tag-e{background:rgba(0,212,170,.12);color:var(--accent2);border:1px solid rgba(0,212,170,.25)}
+
+.prow{display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem}
+.plabel{font-size:.72rem;color:var(--muted);font-weight:500}
+.pval{
+  font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--accent2);
+  background:rgba(0,212,170,.08);border-radius:6px;padding:.08rem .35rem;min-width:40px;text-align:right;
+}
+
+input[type=range]{
+  width:100%;appearance:none;height:4px;border-radius:4px;outline:none;cursor:pointer;
+  background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--pct,50%),var(--surface3) var(--pct,50%),var(--surface3) 100%);
+  margin-bottom:.5rem;
+}
+input[type=range]::-webkit-slider-thumb{
+  appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--bg);
+  box-shadow:0 0 0 2px rgba(108,99,255,.3);transition:transform var(--ease);
+}
+input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.25)}
+
+select{
+  appearance:none;background:var(--surface3);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);font-size:.76rem;padding:.3rem .6rem;
+  cursor:pointer;outline:none;width:100%;margin-bottom:.35rem;
+}
+select:focus{border-color:var(--accent)}
+
+/* Run button */
+#run-btn{
+  width:100%;padding:.75rem;border-radius:var(--r);border:none;cursor:pointer;
+  font-weight:700;font-size:.88rem;font-family:inherit;letter-spacing:.02em;
+  background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#fff;
+  transition:var(--ease);box-shadow:0 4px 20px rgba(108,99,255,.35);
+}
+#run-btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none}
+#run-btn:not(:disabled):hover{transform:translateY(-1px);box-shadow:0 6px 28px rgba(108,99,255,.5)}
+#run-btn:not(:disabled):active{transform:translateY(0)}
+
+/* Progress */
+#prog-wrap{display:none;flex-direction:column;gap:.35rem}
+.prog-bg{height:5px;border-radius:4px;background:var(--surface3);overflow:hidden}
+.prog-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s ease;width:0%}
+#prog-step{font-size:.7rem;color:var(--muted)}
+
+/* Timing */
+#timing-wrap{display:none;flex-direction:column;gap:.3rem}
+.trow{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.35rem .6rem;
+}
+.tlabel{font-size:.7rem;font-weight:600}
+.tval{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--accent2)}
+
+/* VIEWER */
+section{display:flex;flex-direction:column;background:var(--bg);min-height:0}
+
+/* Toolbar */
+#toolbar{
+  padding:.5rem .85rem;display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;
+  background:var(--surface);border-bottom:1px solid var(--border);
+  position:sticky;top:54px;z-index:50;
+}
+@media(max-width:860px){#toolbar{top:0}}
+
+.tgroup{
+  display:flex;align-items:center;gap:.2rem;
+  background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:.12rem;
+}
+.tbtn{
+  border:none;background:transparent;color:var(--muted);
+  font-size:.75rem;font-weight:600;font-family:inherit;
+  padding:.28rem .55rem;border-radius:8px;cursor:pointer;transition:var(--ease);white-space:nowrap;
+}
+.tbtn:hover{color:var(--text);background:var(--surface3)}
+.tbtn.active{background:linear-gradient(135deg,var(--accent),#8b5cf6);color:#fff;box-shadow:0 2px 8px rgba(108,99,255,.35)}
+.tsep{width:1px;height:18px;background:var(--border);margin:0 .08rem}
+.zbadge{
+  font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:700;
+  color:var(--accent2);background:rgba(0,212,170,.1);border:1px solid rgba(0,212,170,.2);
+  border-radius:8px;padding:.22rem .5rem;min-width:44px;text-align:center;
+}
+.ov-wrap{display:none;align-items:center;gap:.35rem}
+.ov-wrap.vis{display:flex}
+#ov-slider{width:80px}
+.opbadge{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--muted);min-width:30px}
+
+/* Canvas area */
+#canvas-area{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  padding:1rem;gap:.85rem;overflow:auto;min-height:350px;
+}
+#canvas-area.grabbing { cursor: grabbing !important; user-select: none; }
+#canvas-area.grabbing * { cursor: grabbing !important; user-select: none; }
+
+/* Empty state */
+#empty{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:.6rem;color:var(--muted);padding:3rem 1rem;text-align:center;
+}
+#empty .ei{font-size:3rem;opacity:.25}
+#empty h2{font-size:1rem;font-weight:600;color:var(--muted)}
+#empty p{font-size:.78rem;max-width:260px;line-height:1.6}
+
+/* Viewer content */
+#vcontent{display:none;flex-direction:column;gap:.85rem;width:100%}
+
+/* Side-by-side */
+.sbs-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;width:100%}
+@media(max-width:560px){.sbs-grid{grid-template-columns:1fr}}
+.icard{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;position:relative;
+}
+.icard-lbl{
+  position:absolute;top:.45rem;left:.45rem;
+  background:rgba(0,0,0,.7);backdrop-filter:blur(6px);
+  border-radius:8px;padding:.18rem .45rem;
+  font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid rgba(255,255,255,.07);z-index:5;
+}
+.icard img{display:block;width:100%;height:auto;image-rendering:pixelated}
+
+/* Swipe compare */
+#swipe-wrap{width:100%;max-width:800px;margin:0 auto}
+#swipe-box{
+  position:relative;border-radius:var(--r);overflow:hidden;
+  background:var(--surface);border:1px solid var(--border);
+  touch-action:none;user-select:none;cursor:col-resize;
+}
+#sw-before,#sw-after{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;display:block}
+#sw-before{position:relative}
+#sw-after{position:absolute;clip-path:inset(0 50% 0 0)}
+#sw-div{
+  position:absolute;top:0;bottom:0;width:3px;
+  background:linear-gradient(180deg,var(--accent),var(--accent2));
+  transform:translateX(-50%);cursor:col-resize;z-index:10;left:50%;
+  box-shadow:0 0 12px rgba(108,99,255,.5);
+}
+#sw-handle{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:34px;height:34px;border-radius:50%;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  box-shadow:0 0 0 3px rgba(255,255,255,.12),var(--shadow);
+  display:flex;align-items:center;justify-content:center;font-size:.7rem;color:#fff;
+}
+#sw-lbl-l{position:absolute;top:.5rem;left:.5rem;color:var(--accent3)}
+#sw-lbl-r{position:absolute;top:.5rem;right:.5rem;color:var(--accent2)}
+.sw-lbl{
+  background:rgba(0,0,0,.7);backdrop-filter:blur(6px);border-radius:8px;
+  padding:.2rem .45rem;font-size:.6rem;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;border:1px solid rgba(255,255,255,.07);z-index:5;
+}
+
+/* Overlay */
+#ov-wrap{width:100%;max-width:800px;margin:0 auto;position:relative}
+#ov-base{display:block;width:100%;border-radius:var(--r);background:var(--surface);border:1px solid var(--border)}
+#ov-top{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;border-radius:var(--r)}
+
+/* Toggle */
+#tog-wrap{width:100%;max-width:800px;margin:0 auto}
+#tog-img{width:100%;border-radius:var(--r);display:block;background:var(--surface);border:1px solid var(--border)}
+.tog-bar{display:flex;gap:.4rem;justify-content:center;margin-top:.5rem;flex-wrap:wrap}
+.tbtn2{
+  padding:.3rem .8rem;border-radius:20px;border:none;cursor:pointer;
+  font-size:.72rem;font-weight:700;font-family:inherit;transition:var(--ease);letter-spacing:.04em;
+}
+.t-orig{background:rgba(167,139,250,.12);color:#a78bfa;border:1px solid rgba(167,139,250,.25)}
+.t-nat {background:rgba(255,107,107,.12);color:var(--accent3);border:1px solid rgba(255,107,107,.25)}
+.t-enh {background:rgba(0,212,170,.12);color:var(--accent2);border:1px solid rgba(0,212,170,.25)}
+.t-orig.on{background:#a78bfa;color:#fff;border-color:#a78bfa}
+.t-nat.on {background:var(--accent3);color:#fff;border-color:var(--accent3)}
+.t-enh.on {background:var(--accent2);color:#000;border-color:var(--accent2)}
+
+.hint{text-align:center;font-size:.68rem;color:var(--muted);margin-top:.3rem}
+
+/* Batch Bar */
+.batch-btn { padding:.4rem 1rem; background:var(--surface3); color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:600; font-size:.8rem; display:flex; align-items:center; gap:.4rem; transition:0.2s }
+.batch-btn:hover { background:var(--surface4) }
+.batch-btn.primary { background:var(--accent) }
+.batch-btn.primary:hover { background:#837aff }
+.batch-btn:disabled { opacity:0.5; pointer-events:none; }
+
+/* Toast */
+#toast{
+  position:fixed;bottom:1.25rem;right:1.25rem;z-index:999;
+  background:var(--surface2);border:1px solid var(--border);border-radius:12px;
+  padding:.55rem .85rem;font-size:.76rem;font-weight:500;box-shadow:var(--shadow);
+  transform:translateY(8px);opacity:0;transition:all .22s ease;pointer-events:none;
+}
+#toast.show{transform:translateY(0);opacity:1}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"><i class="fa-solid fa-microscope" style="font-size:.75rem"></i></div>
+    <div>Edge Detector<span class="logo-sub">Enhanced Canny &nbsp;&middot;&nbsp; Native Canny</span></div>
+  </div>
+  <div class="hbadge"><i class="fa-solid fa-flask-vial" style="margin-right:.3rem"></i>PLM Thesis Tool</div>
+</header>
+
+<main>
+<!-- ===== SIDEBAR ===== -->
+<aside>
+  <div>
+    <div class="sec-label">Image</div>
+    <div id="drop-zone">
+      <span class="dz-icon"><i class="fa-regular fa-image fa-2x"></i></span>
+      <p>Drop image here or <strong>click to browse</strong></p>
+      <p style="margin-top:.25rem;font-size:.65rem">JPG &middot; PNG &middot; BMP &middot; TIFF &middot; Multiple allowed</p>
+      <input type="file" id="file-input" multiple accept="image/*,.jpg,.jpeg,.png,.bmp,.tif,.tiff"/>
+    </div>
+
+    <img id="preview-thumb" alt="Preview"/>
+  </div>
+
+  <div>
+    <div class="sec-label">Parameters</div>
+    <!-- Enhanced Canny first (runs first) -->
+    <div class="pcard">
+      <div class="atag tag-e"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced Canny</div>
+      <div class="prow"><span class="plabel">Low Threshold</span><span class="pval" id="v-ec-low">0.15</span></div>
+      <input type="range" id="ec-low" min="0" max="100" value="15"/>
+      <div class="prow"><span class="plabel">High Threshold</span><span class="pval" id="v-ec-high">0.30</span></div>
+      <input type="range" id="ec-high" min="0" max="100" value="30"/>
+      <div class="prow"><span class="plabel">Phase Congruency k</span><span class="pval" id="v-ec-pck">5.0</span></div>
+      <input type="range" id="ec-pck" min="10" max="100" value="50"/>
+      <div class="prow"><span class="plabel">Tile Grid N&times;M</span></div>
+      <select id="ec-tiles">
+        <option value="1_1">1 &times; 1</option>
+        <option value="2_2" selected>2 &times; 2</option>
+        <option value="3_3">3 &times; 3</option>
+        <option value="4_4">4 &times; 4</option>
+      </select>
+      <div class="prow"><span class="plabel">Tile Overlap (px)</span><span class="pval" id="v-ec-ov">15</span></div>
+      <input type="range" id="ec-overlap" min="0" max="60" value="15"/>
+    </div>
+
+    <!-- Native Canny second (runs second, slower) -->
+    <div class="pcard" style="margin-top:.6rem">
+      <div class="atag tag-n"><i class="fa-solid fa-bolt"></i> Native Canny</div>
+      <div class="prow"><span class="plabel">Low Threshold</span><span class="pval" id="v-nc-low">100</span></div>
+      <input type="range" id="nc-low" min="0" max="255" value="100"/>
+      <div class="prow"><span class="plabel">High Threshold</span><span class="pval" id="v-nc-high">200</span></div>
+      <input type="range" id="nc-high" min="0" max="255" value="200"/>
+      <div class="prow"><span class="plabel">Gaussian Kernel</span></div>
+      <select id="nc-gauss"><option value="3">3 &times; 3</option><option value="5" selected>5 &times; 5</option><option value="7">7 &times; 7</option><option value="9">9 &times; 9</option></select>
+      <div class="prow"><span class="plabel">Sobel Kernel</span></div>
+      <select id="nc-sobel"><option value="3" selected>3 &times; 3</option><option value="5">5 &times; 5</option></select>
+    </div>
+  </div>
+
+  <button id="run-btn" disabled><i class="fa-solid fa-play" style="margin-right:.4rem"></i>Run Both Algorithms</button>
+
+  <div id="prog-wrap">
+    <div class="prog-bg"><div class="prog-fill" id="prog-fill"></div></div>
+    <span id="prog-step">Waiting&hellip;</span>
+  </div>
+
+  <div id="metrics-wrap" style="display:none;flex-direction:column;gap:.4rem;margin-top:1rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:.75rem">
+    <div class="sec-label" style="margin-top:0"><i class="fa-solid fa-chart-simple" style="margin-right:.3rem"></i>Metrics &amp; Timing</div>
+    
+    <div style="display:flex;justify-content:space-between;font-size:.65rem;color:var(--muted);border-bottom:1px solid rgba(255,255,255,.05);padding-bottom:.3rem;margin-bottom:.3rem">
+      <span style="flex:2">Algorithm</span>
+      <span style="flex:1;text-align:right">Time (s)</span>
+      <span style="flex:1;text-align:right" title="Speedup factor">Speedup</span>
+      <span style="flex:1;text-align:right">PSNR</span>
+      <span style="flex:1;text-align:right">MSE</span>
+      <span style="flex:1;text-align:right">RMSE</span>
+      <span style="flex:1;text-align:right">FOM</span>
+    </div>
+    
+    <div style="display:flex;justify-content:space-between;font-size:.7rem;align-items:center">
+      <span style="flex:2;color:var(--accent2);font-weight:600"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="t-enhanced">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums;color:var(--accent)" id="s-enhanced">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="p-enhanced">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="m-enhanced">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="r-enhanced">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="f-enhanced">&mdash;</span>
+    </div>
+    
+    <div style="display:flex;justify-content:space-between;font-size:.7rem;align-items:center;margin-top:.4rem">
+      <span style="flex:2;color:var(--accent3);font-weight:600"><i class="fa-solid fa-bolt"></i> Native</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="t-native">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)" id="s-native">1.00x</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="p-native">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="m-native">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="r-native">&mdash;</span>
+      <span style="flex:1;text-align:right;font-variant-numeric:tabular-nums" id="f-native">&mdash;</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ===== VIEWER ===== -->
+<section>
+  <div id="bulk-controls" style="display:none;background:var(--surface2);border-bottom:1px solid var(--border);padding:.7rem 1rem;align-items:center;gap:1rem;flex-wrap:wrap">
+    <div style="font-size:.85rem;font-weight:600;color:var(--accent);white-space:nowrap" id="bulk-status">Batch Processing</div>
+    
+    <button id="prev-img-btn" class="batch-btn"><i class="fa-solid fa-backward-step"></i> Prev</button>
+    <select id="bulk-dropdown" style="flex:1;min-width:150px;max-width:300px;padding:.5rem;border-radius:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);font-size:.85rem;cursor:pointer"></select>
+    <button id="next-img-btn" class="batch-btn primary">Next <i class="fa-solid fa-forward-step"></i></button>
+    <button id="show-analytics-btn" class="batch-btn" style="margin-left:1rem"><i class="fa-solid fa-table"></i> Summary Analytics</button>
+
+    <label style="margin-left:auto;font-size:.8rem;cursor:pointer;display:flex;align-items:center;gap:.4rem;color:var(--text)">
+      <input type="checkbox" id="auto-advance-cb" checked> Auto-advance pipeline on finish
+    </label>
+  </div>
+
+  <div id="toolbar">
+    <div class="tgroup">
+      <button class="tbtn active" id="m-side"><i class="fa-solid fa-table-columns"></i> Side-by-Side</button>
+      <div class="tsep"></div>
+      <button class="tbtn" id="m-swipe"><i class="fa-solid fa-left-right"></i> Swipe</button>
+      <div class="tsep"></div>
+      <button class="tbtn" id="m-overlay"><i class="fa-solid fa-layer-group"></i> Overlay</button>
+      <div class="tsep"></div>
+      <button class="tbtn" id="m-toggle"><i class="fa-solid fa-shuffle"></i> Toggle</button>
+    </div>
+
+    <div class="tgroup" style="margin-left:auto">
+      <button class="tbtn" id="z-out" title="Zoom out"><i class="fa-solid fa-minus"></i></button>
+      <span class="zbadge" id="z-label">1&times;</span>
+      <button class="tbtn" id="z-in" title="Zoom in"><i class="fa-solid fa-plus"></i></button>
+      <div class="tsep"></div>
+      <button class="tbtn" id="z-1">1&times;</button>
+      <button class="tbtn" id="z-2">2&times;</button>
+      <button class="tbtn" id="z-5">5&times;</button>
+      <button class="tbtn" id="z-10">10&times;</button>
+      <div class="tsep"></div>
+      <button class="tbtn" id="z-fit"><i class="fa-solid fa-compress"></i> Fit</button>
+    </div>
+  </div>
+
+  <div id="canvas-area">
+    <div id="empty">
+      <div class="ei"><i class="fa-solid fa-magnifying-glass" style="opacity:.25;font-size:3rem"></i></div>
+      <h2>No results yet</h2>
+      <p>Upload an image and click <strong>Run Both Algorithms</strong> to see Enhanced Canny results first, followed by Native Canny.</p>
+    </div>
+
+    <div id="vcontent">
+
+      <!-- SIDE BY SIDE: Enhanced first -->
+      <div id="v-side" style="width:100%">
+        <div class="sbs-grid">
+          <div class="icard" id="card-enhanced">
+            <span class="icard-lbl" style="color:var(--accent2)"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced Canny</span>
+            <img id="i-enhanced" alt="Enhanced Canny"/>
+            <div class="img-pending" id="pend-enhanced" style="display:none"><div class="spinner"></div><span>Running Enhanced Canny&hellip;</span></div>
+          </div>
+          <div class="icard" id="card-native">
+            <span class="icard-lbl" style="color:var(--accent3)"><i class="fa-solid fa-bolt"></i> Native Canny</span>
+            <img id="i-native" alt="Native Canny"/>
+            <div class="img-pending" id="pend-native" style="display:none"><div class="spinner"></div><span>Running Native Canny&hellip;</span></div>
+          </div>
+        </div>
+        <div style="margin-top:.6rem">
+          <div class="icard" style="max-width:800px;margin:0 auto">
+            <span class="icard-lbl" style="color:#a78bfa"><i class="fa-regular fa-image"></i> Original Grayscale</span>
+            <img id="i-original" alt="Original"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- SWIPE: Enhanced right, Native left -->
+      <div id="v-swipe" style="display:none;width:100%">
+        <div id="swipe-wrap">
+          <div id="swipe-box">
+            <img id="sw-before" style="display:block;width:100%" alt="Enhanced"/>
+            <img id="sw-after" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;clip-path:inset(0 50% 0 0)" alt="Native"/>
+            <div id="sw-div"><div id="sw-handle"><i class="fa-solid fa-left-right" style="font-size:.65rem"></i></div></div>
+            <span id="sw-lbl-l" class="sw-lbl" style="color:var(--accent2)"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced</span>
+            <span id="sw-lbl-r" class="sw-lbl" style="color:var(--accent3)"><i class="fa-solid fa-bolt"></i> Native</span>
+          </div>
+        </div>
+        <p class="hint"><i class="fa-solid fa-hand-pointer"></i> Drag the divider to compare</p>
+      </div>
+
+      <!-- OVERLAY: Color-coded composite canvas -->
+      <div id="v-overlay" style="display:none;width:100%">
+        <div style="width:100%;max-width:800px;margin:0 auto">
+          <canvas id="ov-canvas"></canvas>
+          <div class="ov-legend">
+            <div class="ov-leg-item">
+              <div class="ov-leg-dot" style="background:#00d4aa"></div>
+              <span style="color:var(--accent2)"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced Canny edges</span>
+            </div>
+            <div class="ov-leg-item">
+              <div class="ov-leg-dot" style="background:#ff6b6b"></div>
+              <span style="color:var(--accent3)"><i class="fa-solid fa-bolt"></i> Native Canny edges</span>
+            </div>
+            <div class="ov-leg-item">
+              <div class="ov-leg-dot" style="background:#a78bfa"></div>
+              <span style="color:#a78bfa"><i class="fa-solid fa-circle-half-stroke"></i> Both algorithms</span>
+            </div>
+          </div>
+          <p class="hint" style="margin-top:.35rem"><i class="fa-solid fa-circle-info"></i> Teal = Enhanced only &middot; Red = Native only &middot; Purple = shared edges</p>
+        </div>
+      </div>
+
+      <!-- TOGGLE -->
+      <div id="v-toggle" style="display:none;width:100%;max-width:800px;margin:0 auto">
+        <img id="tog-img" alt="Toggle"/>
+        <div class="tog-bar">
+          <button class="tbtn2 t-orig on" id="tb-orig"><i class="fa-regular fa-image"></i> Original</button>
+          <button class="tbtn2 t-enh"     id="tb-enh"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced</button>
+          <button class="tbtn2 t-nat"     id="tb-nat"><i class="fa-solid fa-bolt"></i> Native</button>
+        </div>
+        <p class="hint"><i class="fa-solid fa-computer-mouse"></i> Click buttons to switch between outputs</p>
+      </div>
+
+    </div><!-- /vcontent -->
+  </div><!-- /canvas-area -->
+</section>
+</main>
+
+<div id="toast"></div>
+
+<div id="analytics-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:var(--surface);width:95%;max-width:1200px;max-height:85vh;border-radius:var(--r);border:1px solid var(--border);display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,0.5)">
+    <div style="padding:1.5rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <h2 style="margin:0;font-size:1.25rem;color:var(--accent)"><i class="fa-solid fa-chart-line" style="margin-right:.5rem"></i> Batch Analytics Summary</h2>
+      <button id="close-analytics-btn" style="background:none;border:none;color:var(--muted);font-size:1.25rem;cursor:pointer"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div style="padding:1.5rem;overflow-y:auto;flex:1">
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem;text-align:left">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--muted)">
+            <th style="padding:.5rem;text-align:left;width:30%">Image</th>
+            <th style="padding:.5rem;text-align:left">Algorithm</th>
+            <th style="padding:.5rem;text-align:right">Time (s)</th>
+            <th style="padding:.5rem;text-align:right">Speedup</th>
+            <th style="padding:.5rem;text-align:right">PSNR (dB)</th>
+            <th style="padding:.5rem;text-align:right">MSE</th>
+            <th style="padding:.5rem;text-align:right">RMSE</th>
+            <th style="padding:.5rem;text-align:right">FOM</th>
+          </tr>
+        </thead>
+        <tbody id="analytics-tbody">
+          <!-- Rows will be injected here -->
+        </tbody>
+        <tfoot id="analytics-tfoot" style="border-top:2px solid var(--border);font-weight:bold;color:var(--accent2)">
+          <!-- Averages will be injected here -->
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let pollIv=null; // Declared at the very top to prevent any scoping/TDZ issues
+
+// ─── helpers ───────────────────────────────────────────────────
+function toast(msg,dur=2800){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),dur);
+}
+function setPct(el){
+  const mn=+el.min,mx=+el.max,v=+el.value;
+  el.style.setProperty('--pct',((v-mn)/(mx-mn)*100)+'%');
+}
+
+// ─── sliders ───────────────────────────────────────────────────
+function bindSlider(id,vid,fn){
+  const el=document.getElementById(id),disp=document.getElementById(vid);
+  const upd=()=>{disp.textContent=fn(el.value);setPct(el)};
+  el.addEventListener('input',upd);upd();
+}
+bindSlider('nc-low','v-nc-low',v=>Math.round(v));
+bindSlider('nc-high','v-nc-high',v=>Math.round(v));
+bindSlider('ec-low','v-ec-low',v=>(v/100).toFixed(2));
+bindSlider('ec-high','v-ec-high',v=>(v/100).toFixed(2));
+bindSlider('ec-pck','v-ec-pck',v=>(v/10).toFixed(1));
+bindSlider('ec-overlap','v-ec-ov',v=>Math.round(v));
+
+
+// ─── upload ────────────────────────────────────────────────────
+const dropZone=document.getElementById('drop-zone');
+const fileInput=document.getElementById('file-input');
+const preview=document.getElementById('preview-thumb');
+const bulkControls=document.getElementById('bulk-controls');
+const bulkStatus=document.getElementById('bulk-status');
+const bulkDropdown=document.getElementById('bulk-dropdown');
+const nextBtn=document.getElementById('next-img-btn');
+const prevBtn=document.getElementById('prev-img-btn');
+
+let selFiles=[];
+let sessions=[];
+let curFileIdx=0;
+
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('hover')});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('hover'));
+dropZone.addEventListener('drop',e=>{
+  e.preventDefault();dropZone.classList.remove('hover');
+  if(e.dataTransfer.files.length>0){
+    if(pollIv){clearInterval(pollIv);pollIv=null;} // abort previous polling
+    selFiles=Array.from(e.dataTransfer.files);
+    sessions=new Array(selFiles.length).fill(null);
+    curFileIdx=0;
+    handleFile();
+  }
+});
+fileInput.addEventListener('change',()=>{
+  if(fileInput.files.length>0){
+    if(pollIv){clearInterval(pollIv);pollIv=null;} // abort previous polling
+    selFiles=Array.from(fileInput.files);
+    sessions=new Array(selFiles.length).fill(null);
+    curFileIdx=0;
+    handleFile();
+  }
+});
+
+function handleFile(){
+  const f=selFiles[curFileIdx];
+  if(!f) return;
+  
+  if(selFiles.length>1){
+    bulkControls.style.display='flex';
+    bulkStatus.textContent=`File ${curFileIdx+1} of ${selFiles.length}`;
+    nextBtn.disabled=(curFileIdx>=selFiles.length-1);
+    nextBtn.style.opacity=nextBtn.disabled?0.5:1;
+    prevBtn.disabled=(curFileIdx<=0);
+    prevBtn.style.opacity=prevBtn.disabled?0.5:1;
+    
+    // Populate dropdown
+    bulkDropdown.innerHTML='';
+    selFiles.forEach((file, idx) => {
+       const opt = document.createElement('option');
+       opt.value = idx;
+       opt.textContent = `${idx + 1}. ${file.name}`;
+       if (idx === curFileIdx) opt.selected = true;
+       bulkDropdown.appendChild(opt);
+    });
+  }else{
+    bulkControls.style.display='none';
+  }
+
+  const r=new FileReader();
+  r.onload=e=>{preview.src=e.target.result;preview.style.display='block'};
+  r.readAsDataURL(f);
+  document.getElementById('run-btn').disabled=false;
+  toast(`Image loaded: ${f.name}`);
+}
+
+function navigateTo(delta){
+  if(pollIv){clearInterval(pollIv);pollIv=null;} // Stop polling current
+  curFileIdx+=delta;
+  handleFile();
+  if(sessions[curFileIdx]){
+    resumeSession(sessions[curFileIdx]);
+  }else{
+    runAlgos();
+  }
+}
+
+nextBtn.addEventListener('click',()=>navigateTo(1));
+prevBtn.addEventListener('click',()=>navigateTo(-1));
+bulkDropdown.addEventListener('change',(e)=>{
+  const newIdx = parseInt(e.target.value, 10);
+  if(!isNaN(newIdx)) navigateTo(newIdx - curFileIdx);
+});
+
+// ─── run ───────────────────────────────────────────────────────
+document.getElementById('run-btn').addEventListener('click',runAlgos);
+
+function getParams(){
+  const tiles=document.getElementById('ec-tiles').value.split('_');
+  return{
+    nc_low:document.getElementById('nc-low').value,
+    nc_high:document.getElementById('nc-high').value,
+    nc_gauss:document.getElementById('nc-gauss').value,
+    nc_sobel:document.getElementById('nc-sobel').value,
+    ec_N:tiles[0],ec_M:tiles[1],
+    ec_overlap:document.getElementById('ec-overlap').value,
+    ec_window:3,ec_delta:20,
+    ec_guided_r:8,ec_guided_eps:0.05,
+    ec_nscale:4,ec_norient:6,
+    ec_pc_k:(document.getElementById('ec-pck').value/10).toFixed(2),
+    ec_low:(document.getElementById('ec-low').value/100).toFixed(2),
+    ec_high:(document.getElementById('ec-high').value/100).toFixed(2),
+  };
+}
+
+async function runAlgos(){
+  if(selFiles.length===0){toast('Please upload an image first.');return;}
+  const f=selFiles[curFileIdx];
+  
+  if(pollIv){clearInterval(pollIv);pollIv=null;}
+  
+  const btn=document.getElementById('run-btn');
+  btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin" style="margin-right:.4rem"></i>Processing…';
+  const pw=document.getElementById('prog-wrap');
+  pw.style.display='flex';
+  document.getElementById('prog-fill').style.width='0%';
+  document.getElementById('prog-step').textContent='Starting…';
+  document.getElementById('metrics-wrap').style.display='none';
+  // Reset state
+  imgs={native:null,enhanced:null,original:null};
+  ['i-native','i-enhanced','i-original','tog-img'].forEach(id=>{const el=document.getElementById(id);if(el)el.src=''});
+  ['t-enhanced','t-native','p-enhanced','p-native','m-enhanced','m-native','r-enhanced','r-native','s-enhanced','f-enhanced','f-native'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.textContent='—';
+  });
+
+  const fd=new FormData();
+  fd.append('image',f);
+  Object.entries(getParams()).forEach(([k,v])=>fd.append(k,v));
+
+  let sid;
+  try{
+    const r=await fetch('/process',{method:'POST',body:fd});
+    const j=await r.json();
+    if(j.error){toast('Error: '+j.error);btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-play" style="margin-right:.4rem"></i>Run Both Algorithms';return;}
+    sid=j.session_id;
+    sessions[curFileIdx]=sid;
+  }catch(e){toast('Network error: '+e);btn.disabled=false;btn.innerHTML='<i class="fa-solid fa-play" style="margin-right:.4rem"></i>Run Both Algorithms';return;}
+  pollProgress(sid,btn);
+}
+
+function resumeSession(sid){
+  const btn=document.getElementById('run-btn');
+  btn.disabled=true;btn.innerHTML='<i class="fa-solid fa-spinner fa-spin" style="margin-right:.4rem"></i>Processing…';
+  const pw=document.getElementById('prog-wrap');
+  pw.style.display='flex';
+  document.getElementById('prog-fill').style.width='0%';
+  document.getElementById('metrics-wrap').style.display='none';
+  // Reset state before re-syncing
+  imgs={native:null,enhanced:null,original:null};
+  ['i-native','i-enhanced','i-original','tog-img'].forEach(id=>{const el=document.getElementById(id);if(el)el.src=''});
+  ['t-enhanced','t-native','p-enhanced','p-native','m-enhanced','m-native','r-enhanced','r-native','s-enhanced'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.textContent='—';
+  });
+  
+  pollProgress(sid,btn);
+}
+
+function pollProgress(sid,btn){
+  const fill=document.getElementById('prog-fill');
+  const step=document.getElementById('prog-step');
+
+  // Show skeleton placeholders immediately
+  document.getElementById('empty').style.display='none';
+  document.getElementById('vcontent').style.display='flex';
+  showPending('enhanced',true);showPending('native',true);
+  applyMode(curMode);
+
+  pollIv=setInterval(async()=>{
+    try{
+      const r=await fetch('/progress/'+sid);
+      const d=await r.json();
+      fill.style.width=(d.pct||0)+'%';
+      step.textContent=d.step||'\u2026';
+
+      // Partial: Enhanced ready
+      const partial=d.partial||{};
+      if(partial.original_b64&&!imgs.original){
+        imgs.original=partial.original_b64;
+        si('i-original',imgs.original);
+      }
+      if(partial.enhanced&&!imgs.enhanced){
+        imgs.enhanced=partial.enhanced.edge_b64||null;
+        si('i-enhanced',imgs.enhanced);
+        si('sw-before',imgs.enhanced);
+        showPending('enhanced',false);
+        document.getElementById('metrics-wrap').style.display='flex';
+        const et=partial.enhanced.time_s;
+        document.getElementById('t-enhanced').textContent=et!=null?et.toFixed(3):(partial.enhanced.error||'err');
+        document.getElementById('p-enhanced').textContent=partial.enhanced.psnr!=null?partial.enhanced.psnr.toFixed(2):'—';
+        document.getElementById('m-enhanced').textContent=partial.enhanced.mse!=null?partial.enhanced.mse.toFixed(2):'—';
+        document.getElementById('r-enhanced').textContent=partial.enhanced.mse!=null?Math.sqrt(partial.enhanced.mse).toFixed(4):'—';
+        document.getElementById('f-enhanced').textContent=partial.enhanced.fom!=null?partial.enhanced.fom.toFixed(4):'—';
+        if(curMode==='overlay')renderOverlay();
+        toast('\u2728 Enhanced Canny ready!');
+        
+        // Auto-advance logic
+        const autoAdvance = document.getElementById('auto-advance-cb').checked;
+        if(autoAdvance && curFileIdx < selFiles.length - 1 && !sessions[curFileIdx + 1]) {
+           const savedIdx = curFileIdx;
+           setTimeout(() => {
+             // Only auto-advance if user didn't manually navigate away in the meantime
+             if(curFileIdx === savedIdx) navigateTo(1);
+           }, 1500); // 1.5 second pause to let user see the result
+        }
+      }
+      if(partial.native&&!imgs.native){
+        imgs.native=partial.native.edge_b64||null;
+        si('i-native',imgs.native);
+        si('sw-after',imgs.native);
+        showPending('native',false);
+        const nt=partial.native.time_s;
+        document.getElementById('t-native').textContent=nt!=null?nt.toFixed(3):(partial.native.error||'err');
+        document.getElementById('p-native').textContent=partial.native.psnr!=null?partial.native.psnr.toFixed(2):'—';
+        document.getElementById('m-native').textContent=partial.native.mse!=null?partial.native.mse.toFixed(2):'—';
+        document.getElementById('r-native').textContent=partial.native.mse!=null?Math.sqrt(partial.native.mse).toFixed(4):'—';
+        document.getElementById('f-native').textContent=partial.native.fom!=null?partial.native.fom.toFixed(4):'—';
+        if(curMode==='overlay')renderOverlay();
+      }
+
+      if(partial.enhanced && partial.enhanced.time_s && partial.native && partial.native.time_s) {
+         const speedup = (partial.native.time_s / partial.enhanced.time_s).toFixed(2);
+         document.getElementById('s-enhanced').textContent = speedup + 'x';
+      }
+
+      if(d.status==='done'){
+        clearInterval(pollIv);pollIv=null;
+        btn.innerHTML='<i class="fa-solid fa-play" style="margin-right:.4rem"></i>Run Both Algorithms';btn.disabled=false;
+        // Final sync (in case partial missed anything)
+        const res=d.results||partial;
+        if(!imgs.enhanced){imgs.enhanced=res.enhanced?.edge_b64||null;si('i-enhanced',imgs.enhanced);si('sw-before',imgs.enhanced);}
+        if(!imgs.native){imgs.native=res.native?.edge_b64||null;si('i-native',imgs.native);si('sw-after',imgs.native);}
+        if(!imgs.original){imgs.original=res.original_b64||null;si('i-original',imgs.original);}
+        
+        document.getElementById('t-enhanced').textContent=res.enhanced?.time_s!=null?res.enhanced.time_s.toFixed(3):(res.enhanced?.error||'err');
+        document.getElementById('p-enhanced').textContent=res.enhanced?.psnr!=null?res.enhanced.psnr.toFixed(2):'—';
+        document.getElementById('m-enhanced').textContent=res.enhanced?.mse!=null?res.enhanced.mse.toFixed(2):'—';
+        
+        document.getElementById('t-native').textContent=res.native?.time_s!=null?res.native.time_s.toFixed(3):(res.native?.error||'err');
+        document.getElementById('p-native').textContent=res.native?.psnr!=null?res.native.psnr.toFixed(2):'—';
+        document.getElementById('m-native').textContent=res.native?.mse!=null?res.native.mse.toFixed(2):'—';
+        
+        showPending('enhanced',false);showPending('native',false);
+        setToggle('enhanced');
+        if(curMode==='overlay')renderOverlay();
+        toast('\u2713 All results ready!');
+        
+        // Auto-advance logic if Native finished and we are still here
+        const autoAdvance = document.getElementById('auto-advance-cb').checked;
+        if(autoAdvance && curFileIdx < selFiles.length - 1 && !sessions[curFileIdx + 1]) {
+           const savedIdx = curFileIdx;
+           setTimeout(() => {
+             if(curFileIdx === savedIdx) navigateTo(1);
+           }, 2000); // 2 seconds to see final native result
+        }
+      }else if(d.status==='unknown'){
+        clearInterval(pollIv);pollIv=null;
+        btn.disabled=false;
+        btn.innerHTML='<i class="fa-solid fa-play" style="margin-right:.4rem"></i>Run Both Algorithms';toast('Session expired.');
+      }
+    }catch(e){}
+  },800);
+}
+
+function showPending(which,show){
+  const img=document.getElementById('i-'+which);
+  const pend=document.getElementById('pend-'+which);
+  if(!img||!pend)return;
+  if(show){img.style.display='none';pend.style.display='flex';}
+  else{img.style.display='block';pend.style.display='none';}
+}
+
+// ─── display ───────────────────────────────────────────────────
+let imgs={native:null,enhanced:null,original:null};
+
+function si(id,src){if(src&&document.getElementById(id))document.getElementById(id).src=src;}
+
+function displayResults(res){
+  imgs.native  =res.native?.edge_b64  ||null;
+  imgs.enhanced=res.enhanced?.edge_b64||null;
+  imgs.original=res.original_b64||null;
+  document.getElementById('timing-wrap').style.display='flex';
+  document.getElementById('t-native').textContent  =res.native?.time_s!=null?res.native.time_s+'s':(res.native?.error||'err');
+  document.getElementById('t-enhanced').textContent=res.enhanced?.time_s!=null?res.enhanced.time_s+'s':(res.enhanced?.error||'err');
+  si('i-native',imgs.native);si('i-enhanced',imgs.enhanced);si('i-original',imgs.original);
+  si('sw-before',imgs.enhanced);si('sw-after',imgs.native);
+  showPending('enhanced',false);showPending('native',false);
+  setToggle('enhanced');
+  document.getElementById('empty').style.display='none';
+  document.getElementById('vcontent').style.display='flex';
+  applyMode(curMode);
+  renderOverlay();
+  toast('\u2713 Results ready!');
+}
+
+// ─── color-coded composite overlay ────────────────────────────
+function renderOverlay(){
+  const canvas=document.getElementById('ov-canvas');
+  if(!canvas)return;
+  const enh=imgs.enhanced,nat=imgs.native,orig=imgs.original;
+  // Need at least one result
+  if(!enh&&!nat&&!orig)return;
+
+  const loadImg=src=>new Promise((res,rej)=>{
+    if(!src)return res(null);
+    const i=new Image();i.onload=()=>res(i);i.onerror=()=>res(null);i.src=src;
+  });
+
+  Promise.all([loadImg(orig||enh||nat),loadImg(enh),loadImg(nat)]).then(([bg,enhImg,natImg])=>{
+    const w=bg?bg.naturalWidth:(enhImg?enhImg.naturalWidth:natImg.naturalWidth);
+    const h=bg?bg.naturalHeight:(enhImg?enhImg.naturalHeight:natImg.naturalHeight);
+    canvas.width=w;canvas.height=h;
+    const ctx=canvas.getContext('2d');
+
+    // 1. Draw dimmed grayscale background
+    if(bg){ctx.globalAlpha=0.35;ctx.drawImage(bg,0,0,w,h);ctx.globalAlpha=1;}
+    else{ctx.fillStyle='#111';ctx.fillRect(0,0,w,h);}
+
+    // Get pixel data from edge images
+    const offCanvas=document.createElement('canvas');
+    offCanvas.width=w;offCanvas.height=h;
+    const off=offCanvas.getContext('2d');
+
+    let enhData=null,natData=null;
+    if(enhImg){off.clearRect(0,0,w,h);off.drawImage(enhImg,0,0,w,h);enhData=off.getImageData(0,0,w,h).data;}
+    if(natImg){off.clearRect(0,0,w,h);off.drawImage(natImg,0,0,w,h);natData=off.getImageData(0,0,w,h).data;}
+
+    // 2. Composite color-coded edges
+    const out=ctx.getImageData(0,0,w,h);
+    const d=out.data;
+    for(let i=0;i<w*h;i++){
+      const idx=i*4;
+      const eEdge=enhData?enhData[idx]>128:false;
+      const nEdge=natData?natData[idx]>128:false;
+      if(eEdge&&nEdge){d[idx]=167;d[idx+1]=139;d[idx+2]=250;d[idx+3]=255;}   // purple = both
+      else if(eEdge){d[idx]=0;d[idx+1]=212;d[idx+2]=170;d[idx+3]=255;}       // teal = enhanced only
+      else if(nEdge){d[idx]=255;d[idx+1]=107;d[idx+2]=107;d[idx+3]=255;}     // red = native only
+    }
+    ctx.putImageData(out,0,0);
+  });
+}
+
+// ─── toggle mode ───────────────────────────────────────────────
+function setToggle(w){
+  const src=w==='native'?imgs.native:w==='enhanced'?imgs.enhanced:imgs.original;
+  if(src)document.getElementById('tog-img').src=src;
+  const btns=[['tb-orig','t-orig','original'],['tb-nat','t-nat','native'],['tb-enh','t-enh','enhanced']];
+  btns.forEach(([bid,cls,key])=>{
+    const el=document.getElementById(bid);
+    el.className='tbtn2 '+cls+(key===w?' on':'');
+  });
+}
+document.getElementById('tb-orig').addEventListener('click',()=>setToggle('original'));
+document.getElementById('tb-nat').addEventListener('click',()=>setToggle('native'));
+document.getElementById('tb-enh').addEventListener('click',()=>setToggle('enhanced'));
+
+// ─── view modes ────────────────────────────────────────────────
+let curMode='side';
+function applyMode(m){
+  curMode=m;
+  const map={side:'v-side',swipe:'v-swipe',overlay:'v-overlay',toggle:'v-toggle'};
+  Object.entries(map).forEach(([k,id])=>{
+    document.getElementById(id).style.display=k===m?'block':'none';
+  });
+  ['m-side','m-swipe','m-overlay','m-toggle'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById('m-'+m).classList.add('active');
+  if(m==='overlay')renderOverlay();
+  applyZoom();
+}
+['side','swipe','overlay','toggle'].forEach(m=>
+  document.getElementById('m-'+m).addEventListener('click',()=>applyMode(m))
+);
+
+// ─── swipe divider ─────────────────────────────────────────────
+(function(){
+  const box=document.getElementById('swipe-box');
+  const div=document.getElementById('sw-div');
+  const after=document.getElementById('sw-after');
+  let dragging=false;
+  function pos(cx){
+    const rect=box.getBoundingClientRect();
+    const x=Math.max(0,Math.min(cx-rect.left,rect.width));
+    const pct=(x/rect.width*100).toFixed(2);
+    div.style.left=pct+'%';
+    after.style.clipPath='inset(0 '+(100-pct).toFixed(2)+'% 0 0)';
+  }
+  box.addEventListener('mousedown',e=>{dragging=true;pos(e.clientX)});
+  window.addEventListener('mousemove',e=>{if(dragging)pos(e.clientX)});
+  window.addEventListener('mouseup',()=>dragging=false);
+  box.addEventListener('touchstart',e=>{dragging=true;pos(e.touches[0].clientX)},{passive:true});
+  window.addEventListener('touchmove',e=>{if(dragging)pos(e.touches[0].clientX)},{passive:true});
+  window.addEventListener('touchend',()=>dragging=false);
+})();
+
+// ─── zoom ──────────────────────────────────────────────────────
+const ZSTEPS=[0.5,0.75,1,1.5,2,3,5,7,10];
+let zi=2;
+function applyZoom(){
+  const z=ZSTEPS[zi];
+  document.getElementById('z-label').textContent=z+'\u00D7';
+  const vids=['v-side','v-swipe','v-overlay','v-toggle'];
+  vids.forEach(vid=>{
+    const el=document.getElementById(vid);
+    if(el.style.display!=='none'){
+      el.style.transformOrigin='top center';
+      el.style.transform=z!==1?'scale('+z+')':'';
+      // adjust bottom margin so scaled content doesn't get clipped
+      if(z>1){
+        // approximate extra height
+        const h=el.scrollHeight||300;
+        el.parentElement.style.paddingBottom=((z-1)*h*0.55)+'px';
+      }else{
+        el.parentElement.style.paddingBottom='';
+      }
+    }else{
+      el.style.transform='';
+    }
+  });
+}
+document.getElementById('z-in').addEventListener('click',()=>{if(zi<ZSTEPS.length-1){zi++;applyZoom();}});
+document.getElementById('z-out').addEventListener('click',()=>{if(zi>0){zi--;applyZoom();}});
+document.getElementById('z-1').addEventListener('click',()=>{zi=2;applyZoom()});
+document.getElementById('z-2').addEventListener('click',()=>{zi=4;applyZoom()});
+document.getElementById('z-5').addEventListener('click',()=>{zi=6;applyZoom()});
+document.getElementById('z-10').addEventListener('click',()=>{zi=8;applyZoom()});
+document.getElementById('z-fit').addEventListener('click',()=>{zi=2;applyZoom()});
+document.getElementById('canvas-area').addEventListener('wheel',e=>{
+  if(document.getElementById('vcontent').style.display==='none')return;
+  e.preventDefault();
+  if(e.deltaY<0){if(zi<ZSTEPS.length-1){zi++;applyZoom();}}
+  else{if(zi>0){zi--;applyZoom();}}
+},{passive:false});
+
+// ─── panning ───────────────────────────────────────────────────
+(function(){
+  const ca = document.getElementById('canvas-area');
+  let isDown = false;
+  let startX;
+  let startY;
+  let scrollLeft;
+  let scrollTop;
+
+  ca.addEventListener('mousedown', (e) => {
+    // Ignore clicks on buttons or the swipe divider
+    if(e.target.closest('#sw-div') || e.target.closest('button') || e.target.tagName.toLowerCase() === 'input') return;
+    
+    isDown = true;
+    ca.classList.add('grabbing');
+    startX = e.pageX - ca.offsetLeft;
+    startY = e.pageY - ca.offsetTop;
+    scrollLeft = ca.scrollLeft;
+    scrollTop = ca.scrollTop;
+  });
+  
+  ca.addEventListener('mouseleave', () => { isDown = false; ca.classList.remove('grabbing'); });
+  ca.addEventListener('mouseup', () => { isDown = false; ca.classList.remove('grabbing'); });
+  
+  ca.addEventListener('mousemove', (e) => {
+    if(!isDown) return;
+    e.preventDefault();
+    const x = e.pageX - ca.offsetLeft;
+    const y = e.pageY - ca.offsetTop;
+    const walkX = (x - startX) * 1.5; // Drag speed multiplier
+    const walkY = (y - startY) * 1.5;
+    ca.scrollLeft = scrollLeft - walkX;
+    ca.scrollTop = scrollTop - walkY;
+  });
+})();
+
+// Initialize zoom label on load
+document.getElementById('z-label').textContent='1\u00D7';
+
+// --- Analytics Modal ---
+const analyticsBtn = document.getElementById('show-analytics-btn');
+const closeAnalyticsBtn = document.getElementById('close-analytics-btn');
+const analyticsModal = document.getElementById('analytics-modal');
+
+if(analyticsBtn) {
+  analyticsBtn.addEventListener('click', () => {
+    populateAnalyticsModal();
+    analyticsModal.style.display = 'flex';
+  });
+}
+if(closeAnalyticsBtn) {
+  closeAnalyticsBtn.addEventListener('click', () => {
+    analyticsModal.style.display = 'none';
+  });
+}
+if(analyticsModal) {
+  analyticsModal.addEventListener('click', (e) => {
+    if(e.target === analyticsModal) analyticsModal.style.display = 'none';
+  });
+}
+
+function populateAnalyticsModal() {
+  const tbody = document.getElementById('analytics-tbody');
+  const tfoot = document.getElementById('analytics-tfoot');
+  tbody.innerHTML = '';
+  tfoot.innerHTML = '';
+
+  let count = 0;
+  let sumTimeE = 0, sumTimeN = 0;
+  let sumPsnrE = 0, sumPsnrN = 0;
+  let sumMseE = 0, sumMseN = 0;
+  let sumRmseE = 0, sumRmseN = 0;
+  let sumFomE = 0, sumFomN = 0;
+  let sumSpeedup = 0;
+
+  for (let i = 0; i < selFiles.length; i++) {
+    const s = sessions[i];
+    if (!s || !s.results) continue;
+    count++;
+    
+    const e = s.results.enhanced || {};
+    const n = s.results.native || {};
+
+    const te = e.time_s || 0;
+    const tn = n.time_s || 0;
+    const sp = te > 0 ? tn / te : 0;
+    
+    const pe = e.psnr || 0;
+    const pn = n.psnr || 0;
+    const me = e.mse || 0;
+    const mn = n.mse || 0;
+    const re = Math.sqrt(me);
+    const rn = Math.sqrt(mn);
+    const fe = e.fom || 0;
+    const fn = n.fom || 0;
+
+    sumTimeE += te; sumTimeN += tn;
+    sumSpeedup += sp;
+    sumPsnrE += pe; sumPsnrN += pn;
+    sumMseE += me; sumMseN += mn;
+    sumRmseE += re; sumRmseN += rn;
+    sumFomE += fe; sumFomN += fn;
+
+    // Create 3 rows per image (Enhanced, Native, Difference)
+    const diffTime = te - tn;
+    const diffPsnr = pe - pn;
+    const diffMse = me - mn;
+    const diffRmse = re - rn;
+    const diffFom = fe - fn;
+    
+    const html = `
+      <tr style="border-top:1px solid rgba(255,255,255,0.1)">
+        <td rowspan="3" style="padding:.5rem;border-right:1px solid rgba(255,255,255,0.1);vertical-align:top">
+          <div style="font-weight:bold;color:var(--text);word-break:break-all">${selFiles[i].name}</div>
+        </td>
+        <td style="padding:.5rem;color:var(--accent2)"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced</td>
+        <td style="padding:.5rem;text-align:right">${te.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right;color:var(--accent)">${sp.toFixed(2)}x</td>
+        <td style="padding:.5rem;text-align:right">${pe.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${me.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${re.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right">${fe.toFixed(4)}</td>
+      </tr>
+      <tr>
+        <td style="padding:.5rem;color:var(--accent3)"><i class="fa-solid fa-bolt"></i> Native</td>
+        <td style="padding:.5rem;text-align:right">${tn.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right;color:var(--muted)">1.00x</td>
+        <td style="padding:.5rem;text-align:right">${pn.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${mn.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${rn.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right">${fn.toFixed(4)}</td>
+      </tr>
+      <tr style="background:rgba(255,255,255,0.03)">
+        <td style="padding:.5rem;color:var(--text);font-style:italic">Gain (Δ)</td>
+        <td style="padding:.5rem;text-align:right;color:${diffTime < 0 ? 'var(--accent)' : 'var(--text)'}">${diffTime > 0 ? '+' : ''}${diffTime.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right"></td>
+        <td style="padding:.5rem;text-align:right;color:${diffPsnr > 0 ? 'var(--accent)' : 'var(--text)'}">${diffPsnr > 0 ? '+' : ''}${diffPsnr.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right;color:${diffMse < 0 ? 'var(--accent)' : 'var(--text)'}">${diffMse > 0 ? '+' : ''}${diffMse.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right;color:${diffRmse < 0 ? 'var(--accent)' : 'var(--text)'}">${diffRmse > 0 ? '+' : ''}${diffRmse.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right;color:${diffFom > 0 ? 'var(--accent)' : 'var(--text)'}">${diffFom > 0 ? '+' : ''}${diffFom.toFixed(4)}</td>
+      </tr>
+    `;
+    tbody.innerHTML += html;
+  }
+
+  if (count > 0) {
+    const avgSp = sumSpeedup / count;
+    
+    const avgTimeE = sumTimeE / count;
+    const avgTimeN = sumTimeN / count;
+    const avgPsnrE = sumPsnrE / count;
+    const avgPsnrN = sumPsnrN / count;
+    const avgMseE = sumMseE / count;
+    const avgMseN = sumMseN / count;
+    const avgRmseE = sumRmseE / count;
+    const avgRmseN = sumRmseN / count;
+    const avgFomE = sumFomE / count;
+    const avgFomN = sumFomN / count;
+    
+    const diffAvgTime = avgTimeE - avgTimeN;
+    const diffAvgPsnr = avgPsnrE - avgPsnrN;
+    const diffAvgMse = avgMseE - avgMseN;
+    const diffAvgRmse = avgRmseE - avgRmseN;
+    const diffAvgFom = avgFomE - avgFomN;
+
+    tfoot.innerHTML = `
+      <tr>
+        <td rowspan="3" style="padding:.5rem;border-right:1px solid rgba(255,255,255,0.1)">
+          AVERAGES (n=${count})
+        </td>
+        <td style="padding:.5rem;color:var(--accent2)"><i class="fa-solid fa-wand-magic-sparkles"></i> Enhanced</td>
+        <td style="padding:.5rem;text-align:right">${avgTimeE.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right;color:var(--accent)">${avgSp.toFixed(2)}x</td>
+        <td style="padding:.5rem;text-align:right">${avgPsnrE.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${avgMseE.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${avgRmseE.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right">${avgFomE.toFixed(4)}</td>
+      </tr>
+      <tr>
+        <td style="padding:.5rem;color:var(--accent3)"><i class="fa-solid fa-bolt"></i> Native</td>
+        <td style="padding:.5rem;text-align:right">${avgTimeN.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right;color:var(--muted)">1.00x</td>
+        <td style="padding:.5rem;text-align:right">${avgPsnrN.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${avgMseN.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${avgRmseN.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right">${avgFomN.toFixed(4)}</td>
+      </tr>
+      <tr style="background:rgba(255,255,255,0.03)">
+        <td style="padding:.5rem;color:var(--text);font-style:italic">Gain (Δ)</td>
+        <td style="padding:.5rem;text-align:right;color:${diffAvgTime < 0 ? 'var(--accent)' : 'var(--text)'}">${diffAvgTime > 0 ? '+' : ''}${diffAvgTime.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right"></td>
+        <td style="padding:.5rem;text-align:right;color:${diffAvgPsnr > 0 ? 'var(--accent)' : 'var(--text)'}">${diffAvgPsnr > 0 ? '+' : ''}${diffAvgPsnr.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right;color:${diffAvgMse < 0 ? 'var(--accent)' : 'var(--text)'}">${diffAvgMse > 0 ? '+' : ''}${diffAvgMse.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right;color:${diffAvgRmse < 0 ? 'var(--accent)' : 'var(--text)'}">${diffAvgRmse > 0 ? '+' : ''}${diffAvgRmse.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right;color:${diffAvgFom > 0 ? 'var(--accent)' : 'var(--text)'}">${diffAvgFom > 0 ? '+' : ''}${diffAvgFom.toFixed(4)}</td>
+      </tr>
+      <tr style="border-top:2px solid var(--border)">
+        <td rowspan="1" style="padding:.5rem;border-right:1px solid rgba(255,255,255,0.1)">
+          TOTAL SUM
+        </td>
+        <td style="padding:.5rem;color:var(--text)">Enhanced / Native</td>
+        <td style="padding:.5rem;text-align:right">${sumTimeE.toFixed(3)} / ${sumTimeN.toFixed(3)}</td>
+        <td style="padding:.5rem;text-align:right"></td>
+        <td style="padding:.5rem;text-align:right">${sumPsnrE.toFixed(2)} / ${sumPsnrN.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${sumMseE.toFixed(2)} / ${sumMseN.toFixed(2)}</td>
+        <td style="padding:.5rem;text-align:right">${sumRmseE.toFixed(4)} / ${sumRmseN.toFixed(4)}</td>
+        <td style="padding:.5rem;text-align:right">${sumFomE.toFixed(4)} / ${sumFomN.toFixed(4)}</td>
+      </tr>
+    `;
+  } else {
+    tbody.innerHTML = `<tr><td colspan="8" style="padding:1rem;text-align:center;color:var(--muted)">No data available yet. Run the algorithms first.</td></tr>`;
+  }
+}
+</script>
+</body>
+</html>
