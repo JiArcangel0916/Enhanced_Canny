@@ -26,7 +26,10 @@ from MEASURING_TOOLS.pratt_fom import calculate_fom
 from nativeCanny import canny_edge_detection as native_canny
 from enhanced_canny import enhanced_canny_edge_detection
 
+from flask_cors import CORS
+
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+CORS(app)
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -50,115 +53,91 @@ def _img_to_b64(arr: np.ndarray) -> str:
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode()
 
 
-def _run_algorithms(session_id: str, img_gray: np.ndarray, params: dict):
-    """
-    Runs Enhanced Canny FIRST so results appear quickly in the UI,
-    then runs the slower pure-Python Native Canny and appends its result.
-    The frontend polls /progress and shows partial results as they arrive.
-    """
-    with _lock:
-        _progress[session_id] = {
-            "status": "running",
-            "step": "Starting...",
-            "pct": 0,
-            "partial": {},   # populated as each algo finishes
-        }
+import queue
 
-    original_b64 = _img_to_b64(img_gray)
-    with _lock:
-        _progress[session_id]["partial"]["original_b64"] = original_b64
+ec_queue = queue.Queue()
+nc_queue = queue.Queue()
 
-    # ── 1. Enhanced Canny and Native Canny in PARALLEL ────────────────────────
-    def run_ec():
+def _check_done(session_id):
+    with _lock:
+        if session_id not in _progress: return
+        p = _progress[session_id]["partial"]
+        if "enhanced" in p and "native" in p:
+            _progress[session_id].update(status="done", step="Complete", pct=100, results=p)
+
+def _ec_worker():
+    while True:
+        task = ec_queue.get()
+        if task is None: break
+        session_id, img_gray, params = task
+        with _lock:
+            if session_id in _progress:
+                _progress[session_id]["ec_status"] = "processing"
         try:
             t0 = time.perf_counter()
             enhanced_edge = enhanced_canny_edge_detection(
                 img_gray,
-                N=params["ec_N"],
-                M=params["ec_M"],
-                overlap=params["ec_overlap"],
-                window_size=params["ec_window"],
-                delta=params["ec_delta"],
-                guided_radius=params["ec_guided_r"],
-                guided_eps=params["ec_guided_eps"],
-                nscale=params["ec_nscale"],
-                norient=params["ec_norient"],
-                pc_k=params["ec_pc_k"],
-                low_threshold=params["ec_low"],
-                high_threshold=params["ec_high"],
-                use_parallel=False,
-                verbose=False,
+                N=params["ec_N"], M=params["ec_M"], overlap=params["ec_overlap"],
+                window_size=params["ec_window"], delta=params["ec_delta"],
+                guided_radius=params["ec_guided_r"], guided_eps=params["ec_guided_eps"],
+                nscale=params["ec_nscale"], norient=params["ec_norient"],
+                pc_k=params["ec_pc_k"], low_threshold=params["ec_low"],
+                high_threshold=params["ec_high"], use_parallel=True, verbose=False
             )
             ec_time = time.perf_counter() - t0
             ec_psnr = calculate_psnr(img_gray, enhanced_edge)
             ec_mse = calculate_mse(img_gray, enhanced_edge)
             ec_fom = calculate_fom(enhanced_edge, img_gray)
-            
             with _lock:
                 _progress[session_id]["partial"]["enhanced"] = {
                     "edge_b64": _img_to_b64(enhanced_edge),
                     "time_s": round(ec_time, 4),
-                    "psnr": round(ec_psnr, 4),
-                    "mse": round(ec_mse, 4),
-                    "fom": round(ec_fom, 4)
+                    "psnr": round(ec_psnr, 4), "mse": round(ec_mse, 4), "fom": round(ec_fom, 4)
                 }
-                _progress[session_id]["enhanced_ready"] = True
                 _progress[session_id]["pct"] += 45
         except Exception as e:
             with _lock:
                 _progress[session_id]["partial"]["enhanced"] = {"error": str(e)}
-                _progress[session_id]["enhanced_ready"] = True
                 _progress[session_id]["pct"] += 45
+        finally:
+            _check_done(session_id)
+            ec_queue.task_done()
 
-    def run_nc():
+def _nc_worker():
+    while True:
+        task = nc_queue.get()
+        if task is None: break
+        session_id, img_gray, params = task
+        with _lock:
+            if session_id in _progress:
+                _progress[session_id]["nc_status"] = "processing"
         try:
             t0 = time.perf_counter()
             native_edge = native_canny(
-                img_gray,
-                low_threshold=params["nc_low"],
-                high_threshold=params["nc_high"],
-                gaussian_kernel_size=params["nc_gauss"],
-                sobel_kernel_size=params["nc_sobel"],
+                img_gray, low_threshold=params["nc_low"], high_threshold=params["nc_high"],
+                gaussian_kernel_size=params["nc_gauss"], sobel_kernel_size=params["nc_sobel"]
             )
             nc_time = time.perf_counter() - t0
             nc_psnr = calculate_psnr(img_gray, native_edge)
             nc_mse = calculate_mse(img_gray, native_edge)
             nc_fom = calculate_fom(native_edge, img_gray)
-            
             with _lock:
                 _progress[session_id]["partial"]["native"] = {
                     "edge_b64": _img_to_b64(native_edge),
                     "time_s": round(nc_time, 4),
-                    "psnr": round(nc_psnr, 4),
-                    "mse": round(nc_mse, 4),
-                    "fom": round(nc_fom, 4)
+                    "psnr": round(nc_psnr, 4), "mse": round(nc_mse, 4), "fom": round(nc_fom, 4)
                 }
                 _progress[session_id]["pct"] += 45
         except Exception as e:
             with _lock:
                 _progress[session_id]["partial"]["native"] = {"error": str(e)}
                 _progress[session_id]["pct"] += 45
+        finally:
+            _check_done(session_id)
+            nc_queue.task_done()
 
-    with _lock:
-        _progress[session_id].update(step="Running algorithms concurrently...", pct=10)
-
-    # Start both algorithms concurrently
-    t_ec = threading.Thread(target=run_ec)
-    t_nc = threading.Thread(target=run_nc)
-    t_ec.start()
-    t_nc.start()
-    
-    # Wait for both to finish
-    t_ec.join()
-    t_nc.join()
-
-    with _lock:
-        _progress[session_id].update(
-            status="done",
-            step="Complete",
-            pct=100,
-            results=_progress[session_id]["partial"],
-        )
+threading.Thread(target=_ec_worker, daemon=True).start()
+threading.Thread(target=_nc_worker, daemon=True).start()
 
 
 @app.route("/")
@@ -185,6 +164,8 @@ def process():
         return jsonify(error="Could not read image"), 400
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
 
+
+
     def fi(key, default):
         try: return int(request.form.get(key, default))
         except: return default
@@ -202,7 +183,18 @@ def process():
         ec_pc_k=ff("ec_pc_k", 5.0), ec_low=ff("ec_low", 0.15), ec_high=ff("ec_high", 0.30),
     )
 
-    threading.Thread(target=_run_algorithms, args=(session_id, img_gray, params), daemon=True).start()
+    with _lock:
+        _progress[session_id] = {
+            "status": "running",
+            "step": "Initializing...",
+            "pct": 0,
+            "partial": {"original_b64": _img_to_b64(img_gray)},
+            "ec_status": "queued",
+            "nc_status": "queued",
+        }
+
+    ec_queue.put((session_id, img_gray, params))
+    nc_queue.put((session_id, img_gray, params))
     return jsonify(session_id=session_id)
 
 
@@ -215,5 +207,5 @@ def progress(session_id: str):
 
 if __name__ == "__main__":
     print("Starting Enhanced-Canny Comparison Web UI...")
-    print("Open http://localhost:5000 in your browser.")
-    app.run(debug=False, host="0.0.0.0", port=5000, threaded=True)
+    print("Open http://localhost:5005 in your browser.")
+    app.run(debug=False, host="0.0.0.0", port=5005, threaded=True)

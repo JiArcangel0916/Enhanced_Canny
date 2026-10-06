@@ -2,8 +2,10 @@ import base64
 import numpy as np
 import cv2
 import time
+import os
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from supabase import create_client, Client
 from nativeCanny import run_native_canny
 from enhancedCanny import enhanced_canny_edge_detection as run_enhanced_canny
 from MEASURING_TOOLS.psnr import calculate_psnr
@@ -11,11 +13,32 @@ from MEASURING_TOOLS.rmse import calculate_mse_and_rmse
 from MEASURING_TOOLS.pratt_fom import calculate_fom
 from MEASURING_TOOLS.speedup import calculate_speedup
 
+url: str = os.environ.get("SUPABASE_URL", "https://oobjjjmmnttufxrlnmsd.supabase.co")
+key: str = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vYmpqam1tbnR0dWZ4cmxubXNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExMjA5NTMsImV4cCI6MjEwNjY5Njk1M30.b2X-r_W6W88LUoaek-92vu0qcMw0l_00glSqekh-XQo")
+supabase: Client = create_client(url, key)
+
 app = Flask(__name__)
 CORS(app)
 
+def verify_token(req):
+    auth_header = req.headers.get('Authorization')
+    if not auth_header:
+        return False
+    try:
+        token = auth_header.split(" ")[1]
+        user = supabase.auth.get_user(token)
+        if not user:
+            return False
+        return True
+    except Exception as e:
+        print(f"Token verification failed: {e}")
+        return False
+
 @app.route('/api/detect-edges/native', methods=['POST'])
 def perform_native_canny():
+    if not verify_token(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+
     if 'image' not in request.files:
         return jsonify({'error': 'No image file uploaded'}), 400
 
@@ -60,6 +83,9 @@ def perform_native_canny():
 
 @app.route('/api/detect-edges/enhanced', methods=['POST'])
 def perform_enhanced_canny():
+    if not verify_token(request):
+        return jsonify({'error': 'Unauthorized'}), 401
+
     if 'image' not in request.files:
             return jsonify({'error': 'No image file uploaded'}), 400
     
